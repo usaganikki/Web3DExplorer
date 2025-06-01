@@ -1,0 +1,19 @@
+{
+  "name": "three-test-suite",
+  "version": "0.1.0",
+  "description": "TDD testing framework for Three.js applications",
+  "type": "module",
+  "main": "src/index.js",
+  "scripts": {
+    "test": "jest",
+    "test:watch": "jest --watch"
+  },
+  "dependencies": {
+    "puppeteer": "^22.0.0",
+    "three": "^0.163.0"
+  },
+  "devDependencies": {
+    "jest": "^29.5.0",
+    "jest-environment-jsdom": "^29.5.0"
+  }
+}
