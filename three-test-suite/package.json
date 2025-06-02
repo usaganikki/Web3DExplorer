@@ -6,7 +6,9 @@
   "main": "src/index.js",
   "scripts": {
     "test": "node --experimental-vm-modules node_modules/.bin/jest",
-    "test:watch": "node --experimental-vm-modules node_modules/.bin/jest --watch"
+    "test:watch": "node --experimental-vm-modules node_modules/.bin/jest --watch",
+    "test:puppeteer": "node --experimental-vm-modules node_modules/.bin/jest --selectProjects=puppeteer-tests",
+    "test:dom": "node --experimental-vm-modules node_modules/.bin/jest --selectProjects=dom-tests"
   },
   "dependencies": {
     "puppeteer": "^22.0.0",
@@ -17,13 +19,29 @@
     "jest-environment-jsdom": "^29.5.0"
   },
   "jest": {
-    "testEnvironment": "jsdom",
-    "globals": {
-      "__DEV__": true
-    },
-    "transform": {},
-    "testTimeout": 30000,
-    "moduleFileExtensions": ["js", "json"],
-    "testMatch": ["**/__tests__/**/*.js", "**/?(*.)+(spec|test).js"]
+    "projects": [
+      {
+        "displayName": "puppeteer-tests",
+        "testMatch": [
+          "**/*PuppeteerManager*.test.js",
+          "**/*ScreenshotCapture*.test.js", 
+          "**/*ThreeTestRenderer*.test.js"
+        ],
+        "testEnvironment": "node",
+        "testTimeout": 30000
+      },
+      {
+        "displayName": "dom-tests",
+        "testMatch": [
+          "**/*WebGLEnabler*.test.js",
+          "**/*HtmlTemplateGenerator*.test.js",
+          "**/*SceneInjector*.test.js",
+          "**/*ObjectValidator*.test.js",
+          "**/*TransformValidator*.test.js"
+        ],
+        "testEnvironment": "jsdom",
+        "testTimeout": 30000
+      }
+    ]
   }
 }
