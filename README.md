@@ -286,7 +286,6 @@ Explorer (TypeScript Core)
 - **Prettier**: コードフォーマッター
 
 ### **テスティングフレームワーク**
-- **ThreeTestUtils**: Three.js専用テストユーティリティ ✅
 - **Jest Custom Matchers**: 3Dオブジェクト用カスタムマッチャー ✅
 - **Puppeteer**: ヘッドレスブラウザテスト ✅
 - **Performance Testing**: パフォーマンステスト機能 ✅

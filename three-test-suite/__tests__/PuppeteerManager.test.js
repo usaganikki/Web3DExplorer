@@ -1,4 +1,3 @@
-// TDD Step 1: RED - テストを先に書く（このテストは失敗する）
 import { PuppeteerManager } from '../src/PuppeteerManager.js';
 
 describe('PuppeteerManager - 基本機能', () => {
