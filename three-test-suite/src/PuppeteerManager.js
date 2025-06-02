@@ -3,6 +3,7 @@ import puppeteer from 'puppeteer';
 /**
  * PuppeteerManager
  * Three.js テスト用のPuppeteerブラウザを管理するクラス
+ * WebGL と WebAssembly 両方の機能テストをサポート
  */
 export class PuppeteerManager {
   /**
@@ -34,6 +35,7 @@ export class PuppeteerManager {
 
   /**
    * Puppeteerブラウザを初期化する
+   * @throws {Error} 初期化に失敗した場合
    */
   async initialize() {
     // 既に初期化済みの場合は何もしない
@@ -135,13 +137,14 @@ export class PuppeteerManager {
 
   /**
    * WebAssemblyのパフォーマンステストを実行する
+   * CPU集約的な処理性能とメモリアクセス性能を測定
    * @returns {Promise<WebAssemblyPerformance>} パフォーマンス情報オブジェクト
    * @throws {Error} PuppeteerManagerが初期化されていない場合
    * 
    * @typedef {Object} WebAssemblyPerformance
    * @property {number} executionTime - 実行時間（ミリ秒）
    * @property {number} operationsPerSecond - 秒間演算回数
-   * @property {number} memoryPerformance - メモリアクセス性能
+   * @property {number} memoryPerformance - メモリアクセス性能（操作/秒）
    */
   async benchmarkWebAssembly() {
     this._validateInitialized();
@@ -283,6 +286,7 @@ export class PuppeteerManager {
 
   /**
    * ブラウザ内でWebAssembly情報を取得する関数
+   * 各種WebAssembly機能の対応状況を詳細に確認
    * @private
    * @returns {WebAssemblyInfo} WebAssembly情報オブジェクト
    */
@@ -302,7 +306,8 @@ export class PuppeteerManager {
       result.wasmSupported = true;
       
       // ストリーミングコンパイルサポート確認
-      result.streamingSupported = typeof WebAssembly.compileStreaming === 'function';
+      result.streamingSupported = typeof WebAssembly.compileStreaming === 'function' &&
+                                  typeof WebAssembly.instantiateStreaming === 'function';
       
       // Memory, Table, Globalサポート確認
       result.memorySupported = typeof WebAssembly.Memory === 'function';
@@ -310,16 +315,32 @@ export class PuppeteerManager {
       result.globalSupported = typeof WebAssembly.Global === 'function';
       
       // SharedMemoryサポート確認
+      // SecurityError対策のためtry-catchで囲む
       try {
         result.sharedMemorySupported = typeof SharedArrayBuffer !== 'undefined' && 
-                                      typeof WebAssembly.Memory === 'function';
+                                      result.memorySupported;
+        
+        // さらに詳細な確認: 実際にSharedMemoryが作成可能か
+        if (result.sharedMemorySupported) {
+          try {
+            const testMemory = new WebAssembly.Memory({ 
+              initial: 1, 
+              maximum: 1, 
+              shared: true 
+            });
+            // 正常に作成できればtrue、そうでなければfalse
+            result.sharedMemorySupported = testMemory.buffer instanceof SharedArrayBuffer;
+          } catch (e) {
+            result.sharedMemorySupported = false;
+          }
+        }
       } catch (e) {
         result.sharedMemorySupported = false;
       }
       
       // SIMD対応確認（将来拡張用）
-      // 注: SIMD機能の詳細確認は複雑なため、現在は基本的な存在確認のみ
-      result.simdSupported = false; // 現在は常にfalse
+      // 現在は基本的な検査のみ。実際のSIMD命令セット対応確認は複雑
+      result.simdSupported = false; // 現在は常にfalse（将来の拡張に備えて）
     }
 
     return result;
@@ -327,8 +348,9 @@ export class PuppeteerManager {
 
   /**
    * ブラウザ内でWebAssemblyパフォーマンステストを実行する関数
+   * 数値計算とメモリアクセスの両方の性能を測定
    * @private
-   * @returns {WebAssemblyPerformance} パフォーマンス情報オブジェクト
+   * @returns {Promise<WebAssemblyPerformance>} パフォーマンス情報オブジェクト
    */
   _benchmarkWebAssemblyInBrowser() {
     if (typeof WebAssembly === 'undefined') {
@@ -336,6 +358,13 @@ export class PuppeteerManager {
     }
 
     // 簡単なWASMモジュール（addTwo関数: 2つの数値を加算）
+    // WAT (WebAssembly Text format): 
+    // (module
+    //   (func $addTwo (param $p1 i32) (param $p2 i32) (result i32)
+    //     local.get $p1
+    //     local.get $p2
+    //     i32.add)
+    //   (export "addTwo" (func $addTwo)))
     const wasmBytes = new Uint8Array([
       0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00, 0x01, 0x07, 0x01, 0x60, 0x02, 0x7f, 0x7f, 0x01,
       0x7f, 0x03, 0x02, 0x01, 0x00, 0x07, 0x0a, 0x01, 0x06, 0x61, 0x64, 0x64, 0x54, 0x77, 0x6f, 0x00,
@@ -346,7 +375,7 @@ export class PuppeteerManager {
       .then(result => {
         const addTwo = result.instance.exports.addTwo;
         
-        // パフォーマンステスト実行
+        // CPU集約的処理のパフォーマンステスト
         const startTime = performance.now();
         const iterations = 100000;
         
@@ -358,23 +387,35 @@ export class PuppeteerManager {
         const executionTime = endTime - startTime;
         const operationsPerSecond = Math.round((iterations / executionTime) * 1000);
         
-        // 簡単なメモリパフォーマンステスト
+        // メモリアクセス性能テスト
         const memoryStartTime = performance.now();
-        const memory = new WebAssembly.Memory({ initial: 1 });
-        const buffer = new Uint32Array(memory.buffer);
+        let memoryPerformance = 0;
         
-        for (let i = 0; i < 1000; i++) {
-          buffer[i] = i;
+        try {
+          const memory = new WebAssembly.Memory({ initial: 1 });
+          const buffer = new Uint32Array(memory.buffer);
+          const memoryOperations = 1000;
+          
+          for (let i = 0; i < memoryOperations; i++) {
+            buffer[i] = i;
+          }
+          
+          const memoryEndTime = performance.now();
+          const memoryTime = memoryEndTime - memoryStartTime;
+          memoryPerformance = Math.round((memoryOperations / memoryTime) * 1000);
+        } catch (e) {
+          // メモリアクセステストが失敗した場合は0を返す
+          memoryPerformance = 0;
         }
         
-        const memoryEndTime = performance.now();
-        const memoryPerformance = Math.round(1000 / (memoryEndTime - memoryStartTime));
-        
         return {
-          executionTime: executionTime,
+          executionTime: Math.round(executionTime * 100) / 100, // 小数点以下2桁に丸める
           operationsPerSecond: operationsPerSecond,
           memoryPerformance: memoryPerformance
         };
+      })
+      .catch(error => {
+        throw new Error(`WebAssembly benchmark failed: ${error.message}`);
       });
   }
 }
