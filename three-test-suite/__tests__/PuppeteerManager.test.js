@@ -15,10 +15,17 @@ describe('PuppeteerManager - 基本機能', () => {
   test('cleanup後はブラウザが終了している', async () => {
     const manager = new PuppeteerManager();
     await manager.initialize();
+    
+    // cleanup前にブラウザの存在確認
+    expect(manager.browser).toBeDefined();
+    expect(manager.isInitialized()).toBe(true);
+    
     await manager.cleanup();
     
-    // ブラウザが正しく終了していることを確認
-    expect(manager.browser.isConnected()).toBe(false);
+    // cleanup後の状態確認
+    expect(manager.browser).toBeNull();
+    expect(manager.page).toBeNull();
+    expect(manager.isInitialized()).toBe(false);
   });
 
   test('オプションでヘッドレスモードを設定できる', async () => {
