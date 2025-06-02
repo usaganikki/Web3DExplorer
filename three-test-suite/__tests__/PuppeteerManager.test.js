@@ -65,3 +65,79 @@ describe('PuppeteerManager - 基本機能', () => {
     await expect(manager.cleanup()).resolves.not.toThrow();
   });
 });
+
+describe('PuppeteerManager - WebGL機能', () => {
+  test('WebGLコンテキストが取得できる', async () => {
+    const manager = new PuppeteerManager();
+    await manager.initialize();
+    
+    const webglSupported = await manager.page.evaluate(() => {
+      const canvas = document.createElement('canvas');
+      const gl = canvas.getContext('webgl');
+      return gl !== null;
+    });
+    
+    expect(webglSupported).toBe(true);
+    await manager.cleanup();
+  });
+
+  test('WebGL2も利用可能', async () => {
+    const manager = new PuppeteerManager();
+    await manager.initialize();
+    
+    const webgl2Supported = await manager.page.evaluate(() => {
+      const canvas = document.createElement('canvas');
+      const gl = canvas.getContext('webgl2');
+      return gl !== null;
+    });
+    
+    expect(webgl2Supported).toBe(true);
+    await manager.cleanup();
+  });
+
+  test('WebGLの基本情報が取得できる', async () => {
+    const manager = new PuppeteerManager();
+    await manager.initialize();
+    
+    const webglInfo = await manager.page.evaluate(() => {
+      const canvas = document.createElement('canvas');
+      const gl = canvas.getContext('webgl');
+      if (!gl) return null;
+      
+      return {
+        vendor: gl.getParameter(gl.VENDOR),
+        renderer: gl.getParameter(gl.RENDERER),
+        version: gl.getParameter(gl.VERSION)
+      };
+    });
+    
+    expect(webglInfo).not.toBeNull();
+    expect(webglInfo.vendor).toBeDefined();
+    expect(webglInfo.renderer).toBeDefined();
+    expect(webglInfo.version).toBeDefined();
+    
+    await manager.cleanup();
+  });
+
+  test('getWebGLInfo()メソッドでWebGL情報を取得できる', async () => {
+    const manager = new PuppeteerManager();
+    await manager.initialize();
+    
+    const webglInfo = await manager.getWebGLInfo();
+    
+    expect(webglInfo).toBeDefined();
+    expect(webglInfo.webglSupported).toBe(true);
+    expect(webglInfo.webgl2Supported).toBeDefined();
+    expect(webglInfo.vendor).toBeDefined();
+    expect(webglInfo.renderer).toBeDefined();
+    expect(webglInfo.version).toBeDefined();
+    
+    await manager.cleanup();
+  });
+
+  test('getWebGLInfo()は初期化前に呼ぶとエラーを投げる', async () => {
+    const manager = new PuppeteerManager();
+    
+    await expect(manager.getWebGLInfo()).rejects.toThrow('PuppeteerManager is not initialized');
+  });
+});
