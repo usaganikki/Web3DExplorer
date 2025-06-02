@@ -141,3 +141,55 @@ describe('PuppeteerManager - WebGL機能', () => {
     await expect(manager.getWebGLInfo()).rejects.toThrow('PuppeteerManager is not initialized');
   });
 });
+
+describe('PuppeteerManager - HTMLテンプレート', () => {
+  test('基本HTMLテンプレートが生成される', () => {
+    const manager = new PuppeteerManager();
+    const html = manager.generateTestHTML(() => {});
+    
+    expect(html).toContain('<!DOCTYPE html>');
+    expect(html).toContain('three.min.js');
+    expect(html).toContain('<canvas');
+    expect(html).toContain('id="three-canvas"');
+  });
+
+  test('ユーザースクリプトが注入される', () => {
+    const manager = new PuppeteerManager();
+    const userScript = () => { console.log('test'); };
+    const html = manager.generateTestHTML(userScript);
+    
+    expect(html).toContain(userScript.toString());
+  });
+
+  test('生成HTMLがページに読み込める', async () => {
+    const manager = new PuppeteerManager();
+    await manager.initialize();
+    
+    const html = manager.generateTestHTML(() => {
+      window.testValue = 'loaded';
+    });
+    
+    await manager.page.setContent(html);
+    
+    const testValue = await manager.page.evaluate(() => window.testValue);
+    expect(testValue).toBe('loaded');
+    
+    await manager.cleanup();
+  });
+
+  test('Three.js CDNが正しく読み込まれる', async () => {
+    const manager = new PuppeteerManager();
+    await manager.initialize();
+    
+    const html = manager.generateTestHTML(() => {});
+    await manager.page.setContent(html);
+    
+    // Three.jsライブラリが読み込まれるまで待つ
+    await manager.page.waitForFunction('typeof THREE !== "undefined"', { timeout: 5000 });
+    
+    const threeLoaded = await manager.page.evaluate(() => typeof THREE !== 'undefined');
+    expect(threeLoaded).toBe(true);
+    
+    await manager.cleanup();
+  });
+});
