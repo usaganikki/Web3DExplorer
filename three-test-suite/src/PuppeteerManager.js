@@ -109,6 +109,52 @@ export class PuppeteerManager {
   }
 
   /**
+   * Three.js用のHTMLテンプレートを生成する
+   * @param {Function} userScript - ページに注入するユーザースクリプト
+   * @returns {string} 生成されたHTMLコンテンツ
+   */
+  generateTestHTML(userScript) {
+    const userScriptString = userScript.toString();
+    
+    return `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Three.js Test Environment</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: #000;
+        }
+        #three-canvas {
+            display: block;
+            width: 100vw;
+            height: 100vh;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="three-canvas"></canvas>
+    
+    <!-- Three.js CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    
+    <!-- User Script -->
+    <script>
+        // Wait for Three.js to load
+        window.addEventListener('load', function() {
+            // Execute user script
+            (${userScriptString})();
+        });
+    </script>
+</body>
+</html>`;
+  }
+
+  /**
    * 初期化状態を検証する
    * @private
    * @throws {Error} 初期化されていない場合
