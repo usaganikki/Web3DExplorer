@@ -4,6 +4,7 @@
   "description": "TDD testing framework for Three.js applications",
   "type": "module",
   "main": "src/index.js",
+  "testTimeout": 30000,
   "scripts": {
     "test": "node --experimental-vm-modules node_modules/.bin/jest",
     "test:watch": "node --experimental-vm-modules node_modules/.bin/jest --watch",
@@ -27,8 +28,7 @@
           "**/*ScreenshotCapture*.test.js", 
           "**/*ThreeTestRenderer*.test.js"
         ],
-        "testEnvironment": "node",
-        "testTimeout": 30000
+        "testEnvironment": "node"
       },
       {
         "displayName": "dom-tests",
@@ -39,8 +39,7 @@
           "**/*ObjectValidator*.test.js",
           "**/*TransformValidator*.test.js"
         ],
-        "testEnvironment": "jsdom",
-        "testTimeout": 30000
+        "testEnvironment": "jsdom"
       }
     ]
   }
