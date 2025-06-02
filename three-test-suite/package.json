@@ -25,7 +25,10 @@
         "displayName": "puppeteer-tests",
         "testMatch": [
           "**/*PuppeteerManager*.test.js",
-          "**/*ScreenshotCapture*.test.js", 
+          "**/*BrowserManager*.test.js",
+          "**/*EnvironmentInspector*.test.js",
+          "**/*PerformanceTester*.test.js",
+          "**/*ScreenshotCapture*.test.js",
           "**/*ThreeTestRenderer*.test.js"
         ],
         "testEnvironment": "node"
