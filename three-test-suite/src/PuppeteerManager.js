@@ -84,4 +84,45 @@ export class PuppeteerManager {
   isInitialized() {
     return this.browser !== null && this.page !== null;
   }
+
+  /**
+   * WebGLの情報と対応状況を取得する
+   * @returns {Promise<Object>} WebGL情報オブジェクト
+   * @throws {Error} PuppeteerManagerが初期化されていない場合
+   */
+  async getWebGLInfo() {
+    if (!this.isInitialized()) {
+      throw new Error('PuppeteerManager is not initialized');
+    }
+
+    try {
+      const webglInfo = await this.page.evaluate(() => {
+        // WebGLサポート確認
+        const canvas = document.createElement('canvas');
+        const webglContext = canvas.getContext('webgl');
+        const webgl2Context = canvas.getContext('webgl2');
+
+        const result = {
+          webglSupported: webglContext !== null,
+          webgl2Supported: webgl2Context !== null,
+          vendor: null,
+          renderer: null,
+          version: null
+        };
+
+        // WebGL基本情報を取得
+        if (webglContext) {
+          result.vendor = webglContext.getParameter(webglContext.VENDOR);
+          result.renderer = webglContext.getParameter(webglContext.RENDERER);
+          result.version = webglContext.getParameter(webglContext.VERSION);
+        }
+
+        return result;
+      });
+
+      return webglInfo;
+    } catch (error) {
+      throw new Error(`Failed to get WebGL info: ${error.message}`);
+    }
+  }
 }
