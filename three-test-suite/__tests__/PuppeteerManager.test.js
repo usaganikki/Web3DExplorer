@@ -142,6 +142,91 @@ describe('PuppeteerManager - WebGL機能', () => {
   });
 });
 
+describe('PuppeteerManager - WebAssembly機能', () => {
+  test('WebAssemblyオブジェクトが利用可能', async () => {
+    const manager = new PuppeteerManager();
+    await manager.initialize();
+    
+    const wasmSupported = await manager.page.evaluate(() => {
+      return typeof WebAssembly !== 'undefined' && 
+             typeof WebAssembly.instantiate === 'function';
+    });
+    
+    expect(wasmSupported).toBe(true);
+    await manager.cleanup();
+  });
+
+  test('WebAssembly.compileStreamingが利用可能', async () => {
+    const manager = new PuppeteerManager();
+    await manager.initialize();
+    
+    const streamingSupported = await manager.page.evaluate(() => {
+      return typeof WebAssembly.compileStreaming === 'function';
+    });
+    
+    expect(streamingSupported).toBe(true);
+    await manager.cleanup();
+  });
+
+  test('簡単なWASMモジュールが実行できる', async () => {
+    const manager = new PuppeteerManager();
+    await manager.initialize();
+    
+    const wasmResult = await manager.page.evaluate(() => {
+      // 簡単なWASMモジュール（addTwo関数: 2つの数値を加算）
+      const wasmBytes = new Uint8Array([
+        0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00, 0x01, 0x07, 0x01, 0x60, 0x02, 0x7f, 0x7f, 0x01,
+        0x7f, 0x03, 0x02, 0x01, 0x00, 0x07, 0x0a, 0x01, 0x06, 0x61, 0x64, 0x64, 0x54, 0x77, 0x6f, 0x00,
+        0x00, 0x0a, 0x09, 0x01, 0x07, 0x00, 0x20, 0x00, 0x20, 0x01, 0x6a, 0x0b
+      ]);
+      
+      return WebAssembly.instantiate(wasmBytes)
+        .then(result => {
+          const addTwo = result.instance.exports.addTwo;
+          return addTwo(5, 3); // 5 + 3 = 8
+        });
+    });
+    
+    expect(wasmResult).toBe(8);
+    await manager.cleanup();
+  });
+
+  test('getWebAssemblyInfo()メソッドでWASM情報を取得できる', async () => {
+    const manager = new PuppeteerManager();
+    await manager.initialize();
+    
+    const wasmInfo = await manager.getWebAssemblyInfo();
+    
+    expect(wasmInfo).toBeDefined();
+    expect(wasmInfo.wasmSupported).toBe(true);
+    expect(wasmInfo.streamingSupported).toBeDefined();
+    expect(wasmInfo.memorySupported).toBeDefined();
+    expect(wasmInfo.tableSupported).toBeDefined();
+    expect(wasmInfo.sharedMemorySupported).toBeDefined();
+    
+    await manager.cleanup();
+  });
+
+  test('getWebAssemblyInfo()は初期化前に呼ぶとエラーを投げる', async () => {
+    const manager = new PuppeteerManager();
+    
+    await expect(manager.getWebAssemblyInfo()).rejects.toThrow('PuppeteerManager is not initialized');
+  });
+
+  test('WASMパフォーマンステストが実行できる', async () => {
+    const manager = new PuppeteerManager();
+    await manager.initialize();
+    
+    const performance = await manager.benchmarkWebAssembly();
+    
+    expect(performance).toBeDefined();
+    expect(performance.executionTime).toBeGreaterThan(0);
+    expect(performance.operationsPerSecond).toBeGreaterThan(0);
+    
+    await manager.cleanup();
+  });
+});
+
 describe('PuppeteerManager - HTMLテンプレート', () => {
   test('基本HTMLテンプレートが生成される', () => {
     const manager = new PuppeteerManager();
