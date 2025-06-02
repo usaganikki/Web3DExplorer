@@ -155,7 +155,7 @@ export const TokyoStationExplorer: React.FC<TokyoStationExplorerProps> = ({
         id: 'marunouchi-exit',
         name: '丸の内口',
         type: 'station',
-        coordinates: { latitude: 35.6812, longitude: 139.7665 },
+        coordinate: { latitude: 35.6812, longitude: 139.7665 }, // Changed 'coordinates' to 'coordinate'
         properties: {
           exitNumber: 'A1'
         }
@@ -170,6 +170,7 @@ export const TokyoStationExplorer: React.FC<TokyoStationExplorerProps> = ({
       nearbyBuildings: mockBuildings,
       roads: mockRoads,
       terrain: {
+        id: 'tokyo-terrain', // Added id
         width: 200,
         height: 200,
         data: new Float32Array(200 * 200).fill(0), // 平坦な地形
@@ -187,7 +188,7 @@ export const TokyoStationExplorer: React.FC<TokyoStationExplorerProps> = ({
     try {
       setLoadingProgress(10);
       
-      const gisManager = new GISManager(TOKYO_PROJECTION);
+      const gisManager = new GISManager(); // Removed TOKYO_PROJECTION argument
       setGisManager(gisManager);
       
       setLoadingProgress(30);
@@ -206,7 +207,7 @@ export const TokyoStationExplorer: React.FC<TokyoStationExplorerProps> = ({
       const stationBuilding = gisManager.createBuilding(tokyoStationData.station);
       explorer.addObject(stationBuilding, { name: 'tokyo-station' });
       
-      tokyoStationData.nearbyBuildings.forEach((building, index) => {
+      tokyoStationData.nearbyBuildings.forEach((building: BuildingData, index: number) => {
         const buildingObject = gisManager.createBuilding(building);
         explorer.addObject(buildingObject, { name: `building-${index}` });
       });
@@ -214,13 +215,13 @@ export const TokyoStationExplorer: React.FC<TokyoStationExplorerProps> = ({
       setLoadingProgress(80);
       
       // 道路の追加
-      tokyoStationData.roads.forEach((road, index) => {
+      tokyoStationData.roads.forEach((road: RoadData, index: number) => {
         const roadObject = gisManager.createRoad(road);
         explorer.addObject(roadObject, { name: `road-${index}` });
       });
       
       // POIの追加
-      tokyoStationData.exits.forEach((poi, index) => {
+      tokyoStationData.exits.forEach((poi: POIData, index: number) => {
         const poiObject = gisManager.createPOI(poi);
         explorer.addObject(poiObject, { name: `poi-${index}` });
       });
@@ -337,9 +338,9 @@ export const TokyoStationExplorer: React.FC<TokyoStationExplorerProps> = ({
             Performance Metrics
           </div>
           <div>FPS: {metrics.fps}</div>
-          <div>Frame Time: {metrics.frameTime.toFixed(2)}ms</div>
-          <div>Render Time: {metrics.renderTime.toFixed(2)}ms</div>
-          <div>Triangles: {metrics.triangleCount.toLocaleString()}</div>
+          <div>Frame Time: {metrics.frameTime?.toFixed(2)}ms</div>
+          <div>Render Time: {metrics.renderTime?.toFixed(2)}ms</div>
+          <div>Triangles: {metrics.triangleCount?.toLocaleString()}</div>
           <div>Draw Calls: {metrics.drawCalls}</div>
           <div>Memory: {metrics.memoryUsage.total}MB</div>
         </div>

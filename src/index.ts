@@ -1,5 +1,6 @@
 // メインエクスポート
-export { Explorer } from './core/Explorer';
+import Explorer from './core/Explorer'; // Import Explorer as default
+export { Explorer }; // Re-export Explorer
 export { GISManager } from './gis/GISManager';
 export { EventEmitter } from './utils/EventEmitter';
 
@@ -15,7 +16,7 @@ export * from './types/testing';
 // デフォルト設定
 import * as THREE from 'three';
 import { Web3DExplorerConfig } from './types';
-import { TOKYO_PROJECTION } from './types/gis';
+import type { TOKYO_PROJECTION } from './types/gis'; // Import as type
 
 /**
  * デフォルトの Web3DExplorer 設定
@@ -124,7 +125,7 @@ export function createTokyoStationExplorer(container?: HTMLElement): Explorer {
 }
 
 // プロジェクション
-export { TOKYO_PROJECTION };
+export type { TOKYO_PROJECTION }; // Export as type
 
 // バージョン情報
 export const VERSION = '0.1.0';

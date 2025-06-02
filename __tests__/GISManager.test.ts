@@ -44,6 +44,7 @@ describe('GISManager', () => {
   describe('3D object creation', () => {
     it('should create terrain from terrain data', () => {
       const terrainData: TerrainData = {
+        id: 'test-terrain', // Added id
         width: 10,
         height: 10,
         data: new Float32Array(100).fill(0),
@@ -112,7 +113,7 @@ describe('GISManager', () => {
         id: 'test-poi',
         name: 'Test POI',
         type: 'station',
-        coordinates: { latitude: 35.6812, longitude: 139.7671 },
+        coordinate: { latitude: 35.6812, longitude: 139.7671 }, // Changed 'coordinates' to 'coordinate'
         properties: {}
       };
       
@@ -128,7 +129,7 @@ describe('GISManager', () => {
       const layer = {
         id: 'test-layer',
         name: 'Test Layer',
-        type: 'buildings' as const,
+        type: 'building' as const, // Changed 'buildings' to 'building'
         visible: true,
         opacity: 1,
         data: []
@@ -144,7 +145,7 @@ describe('GISManager', () => {
       const layer = {
         id: 'test-layer',
         name: 'Test Layer',
-        type: 'buildings' as const,
+        type: 'building' as const, // Changed 'buildings' to 'building'
         visible: true,
         opacity: 1,
         data: []
@@ -161,7 +162,7 @@ describe('GISManager', () => {
       const layer = {
         id: 'test-layer',
         name: 'Test Layer',
-        type: 'buildings' as const,
+        type: 'building' as const, // Changed 'buildings' to 'building'
         visible: true,
         opacity: 1,
         data: []

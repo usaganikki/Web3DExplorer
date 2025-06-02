@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { EventEmitter } from '../utils/EventEmitter';
 import {
-  Web3DExplorer,
+  Web3DExplorer as IWeb3DExplorer, // Aliased import
   Web3DExplorerConfig,
   Object3DConfig,
   PerformanceMetrics,
@@ -12,10 +12,10 @@ import {
  * Web3DExplorer のメインクラス
  * Three.js をベースとした 3D 可視化ライブラリのコアエンジン
  */
-export class Explorer extends EventEmitter implements Web3DExplorer {
-  public scene: THREE.Scene;
-  public camera: THREE.PerspectiveCamera;
-  public renderer: THREE.WebGLRenderer;
+export class Explorer extends EventEmitter implements IWeb3DExplorer { // Use aliased interface
+  public scene!: THREE.Scene; // Definite assignment assertion
+  public camera!: THREE.PerspectiveCamera; // Definite assignment assertion
+  public renderer!: THREE.WebGLRenderer; // Definite assignment assertion
   public config: Web3DExplorerConfig;
   
   private animationId: number | null = null;
@@ -49,22 +49,29 @@ export class Explorer extends EventEmitter implements Web3DExplorer {
     this.scene = new THREE.Scene();
     
     const sceneConfig = this.config.scene;
-    if (sceneConfig.background) {
-      this.scene.background = sceneConfig.background;
+    if (sceneConfig?.background) { // Optional chaining
+      this.scene.background = new THREE.Color(sceneConfig.background); // Ensure THREE.Color instance
     }
     
-    if (sceneConfig.fog) {
+    if (sceneConfig?.fog) { // Optional chaining
       const { type, color, near, far, density } = sceneConfig.fog;
       if (type === 'linear' && near !== undefined && far !== undefined) {
-        this.scene.fog = new THREE.Fog(color, near, far);
+        this.scene.fog = new THREE.Fog(new THREE.Color(color), near, far);
       } else if (type === 'exponential' && density !== undefined) {
-        this.scene.fog = new THREE.FogExp2(color, density);
+        this.scene.fog = new THREE.FogExp2(new THREE.Color(color), density);
       }
     }
   }
 
   private initializeCamera(): void {
-    const { fov, aspect, near, far, position, target } = this.config.camera;
+    const camConfig = this.config.camera; // Store in a variable for safer access
+    if (!camConfig) {
+        // Handle missing camera config, e.g., by creating a default camera
+        this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        this.camera.position.set(0, 5, 10);
+        return;
+    }
+    const { fov = 75, aspect = window.innerWidth / window.innerHeight, near = 0.1, far = 1000, position, target } = camConfig;
     this.camera = new THREE.PerspectiveCamera(fov, aspect, near, far);
     
     if (position) {
@@ -79,14 +86,14 @@ export class Explorer extends EventEmitter implements Web3DExplorer {
   private initializeRenderer(container?: HTMLElement): void {
     const rendererConfig = this.config.renderer;
     this.renderer = new THREE.WebGLRenderer({
-      canvas: rendererConfig.canvas,
-      antialias: rendererConfig.antialias ?? true,
-      alpha: rendererConfig.alpha ?? false,
-      preserveDrawingBuffer: rendererConfig.preserveDrawingBuffer ?? false,
-      powerPreference: rendererConfig.powerPreference ?? 'default',
-      stencil: rendererConfig.stencil ?? true,
-      depth: rendererConfig.depth ?? true,
-      logarithmicDepthBuffer: rendererConfig.logarithmicDepthBuffer ?? false
+      canvas: rendererConfig?.canvas, // Optional chaining
+      antialias: rendererConfig?.antialias ?? true,
+      alpha: rendererConfig?.alpha ?? false,
+      preserveDrawingBuffer: rendererConfig?.preserveDrawingBuffer ?? false,
+      powerPreference: rendererConfig?.powerPreference ?? 'default',
+      stencil: rendererConfig?.stencil ?? true,
+      depth: rendererConfig?.depth ?? true,
+      logarithmicDepthBuffer: rendererConfig?.logarithmicDepthBuffer ?? false
     });
     
     this.renderer.setSize(window.innerWidth, window.innerHeight);
@@ -102,7 +109,7 @@ export class Explorer extends EventEmitter implements Web3DExplorer {
   }
 
   private initializeLights(): void {
-    this.config.lights.forEach(lightConfig => {
+    this.config.lights?.forEach((lightConfig: any) => { // Added optional chaining and type annotation
       const light = this.createLight(lightConfig);
       if (light) {
         this.scene.add(light);
@@ -110,9 +117,9 @@ export class Explorer extends EventEmitter implements Web3DExplorer {
     });
     
     // アンビエントライトの追加
-    if (this.config.scene.ambientLight) {
+    if (this.config.scene?.ambientLight) { // Optional chaining
       const { color, intensity } = this.config.scene.ambientLight;
-      const ambientLight = new THREE.AmbientLight(color, intensity);
+      const ambientLight = new THREE.AmbientLight(new THREE.Color(color), intensity);
       this.scene.add(ambientLight);
     }
   }
@@ -205,6 +212,7 @@ export class Explorer extends EventEmitter implements Web3DExplorer {
       fps: 0,
       frameTime: 0,
       renderTime: 0,
+      triangles: 0, // Added missing 'triangles'
       triangleCount: 0,
       drawCalls: 0,
       memoryUsage: {
@@ -222,6 +230,7 @@ export class Explorer extends EventEmitter implements Web3DExplorer {
       fps: Math.round(1 / this.clock.getDelta()),
       frameTime: this.clock.getDelta() * 1000,
       renderTime: 0, // WebGLRenderer doesn't provide this directly
+      triangles: info.render.triangles, // Added missing 'triangles'
       triangleCount: info.render.triangles,
       drawCalls: info.render.calls,
       memoryUsage: {
@@ -347,3 +356,5 @@ export class Explorer extends EventEmitter implements Web3DExplorer {
     super.emit(event, data);
   }
 }
+
+export default Explorer;
