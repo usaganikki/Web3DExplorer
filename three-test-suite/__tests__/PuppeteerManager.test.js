@@ -192,4 +192,78 @@ describe('PuppeteerManager - HTMLテンプレート', () => {
     
     await manager.cleanup();
   });
+
+  test('カスタムタイトルが設定される', () => {
+    const manager = new PuppeteerManager();
+    const customTitle = 'Custom Three.js Test';
+    const html = manager.generateTestHTML(() => {}, { title: customTitle });
+    
+    expect(html).toContain(`<title>${customTitle}</title>`);
+  });
+
+  test('異なるThree.jsバージョンが指定できる', () => {
+    const manager = new PuppeteerManager();
+    const customVersion = 'r140';
+    const html = manager.generateTestHTML(() => {}, { threeJsVersion: customVersion });
+    
+    expect(html).toContain(`/three.js/${customVersion}/three.min.js`);
+  });
+
+  test('自動実行を無効にできる', () => {
+    const manager = new PuppeteerManager();
+    const userScript = () => { console.log('test'); };
+    const html = manager.generateTestHTML(userScript, { autoExecute: false });
+    
+    expect(html).toContain('window.userScript');
+    expect(html).not.toContain('window.addEventListener(\'load\'');
+  });
+
+  test('無効なユーザースクリプトでエラーを投げる', () => {
+    const manager = new PuppeteerManager();
+    
+    expect(() => {
+      manager.generateTestHTML('not a function');
+    }).toThrow('userScript must be a function');
+    
+    expect(() => {
+      manager.generateTestHTML(null);
+    }).toThrow('userScript must be a function');
+    
+    expect(() => {
+      manager.generateTestHTML(undefined);
+    }).toThrow('userScript must be a function');
+  });
+
+  test('デバッグ情報要素が含まれる', () => {
+    const manager = new PuppeteerManager();
+    const html = manager.generateTestHTML(() => {});
+    
+    expect(html).toContain('class="debug-info"');
+    expect(html).toContain('id="debug-info"');
+  });
+
+  test('複雑なユーザースクリプトが正しく注入される', async () => {
+    const manager = new PuppeteerManager();
+    await manager.initialize();
+    
+    const complexScript = () => {
+      window.testObject = {
+        value: 42,
+        array: [1, 2, 3],
+        method: function() { return 'method called'; }
+      };
+    };
+    
+    const html = manager.generateTestHTML(complexScript);
+    await manager.page.setContent(html);
+    
+    const testObject = await manager.page.evaluate(() => window.testObject);
+    expect(testObject.value).toBe(42);
+    expect(testObject.array).toEqual([1, 2, 3]);
+    
+    const methodResult = await manager.page.evaluate(() => window.testObject.method());
+    expect(methodResult).toBe('method called');
+    
+    await manager.cleanup();
+  });
 });
