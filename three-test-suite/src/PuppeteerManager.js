@@ -87,42 +87,64 @@ export class PuppeteerManager {
 
   /**
    * WebGLの情報と対応状況を取得する
-   * @returns {Promise<Object>} WebGL情報オブジェクト
+   * @returns {Promise<WebGLInfo>} WebGL情報オブジェクト
    * @throws {Error} PuppeteerManagerが初期化されていない場合
+   * 
+   * @typedef {Object} WebGLInfo
+   * @property {boolean} webglSupported - WebGLサポート状況
+   * @property {boolean} webgl2Supported - WebGL2サポート状況
+   * @property {string|null} vendor - WebGLベンダー情報
+   * @property {string|null} renderer - レンダラー情報
+   * @property {string|null} version - WebGLバージョン情報
    */
   async getWebGLInfo() {
-    if (!this.isInitialized()) {
-      throw new Error('PuppeteerManager is not initialized');
-    }
+    this._validateInitialized();
 
     try {
-      const webglInfo = await this.page.evaluate(() => {
-        // WebGLサポート確認
-        const canvas = document.createElement('canvas');
-        const webglContext = canvas.getContext('webgl');
-        const webgl2Context = canvas.getContext('webgl2');
-
-        const result = {
-          webglSupported: webglContext !== null,
-          webgl2Supported: webgl2Context !== null,
-          vendor: null,
-          renderer: null,
-          version: null
-        };
-
-        // WebGL基本情報を取得
-        if (webglContext) {
-          result.vendor = webglContext.getParameter(webglContext.VENDOR);
-          result.renderer = webglContext.getParameter(webglContext.RENDERER);
-          result.version = webglContext.getParameter(webglContext.VERSION);
-        }
-
-        return result;
-      });
-
+      const webglInfo = await this.page.evaluate(this._getWebGLInfoInBrowser);
       return webglInfo;
     } catch (error) {
       throw new Error(`Failed to get WebGL info: ${error.message}`);
     }
+  }
+
+  /**
+   * 初期化状態を検証する
+   * @private
+   * @throws {Error} 初期化されていない場合
+   */
+  _validateInitialized() {
+    if (!this.isInitialized()) {
+      throw new Error('PuppeteerManager is not initialized');
+    }
+  }
+
+  /**
+   * ブラウザ内でWebGL情報を取得する関数
+   * @private
+   * @returns {WebGLInfo} WebGL情報オブジェクト
+   */
+  _getWebGLInfoInBrowser() {
+    // WebGLサポート確認
+    const canvas = document.createElement('canvas');
+    const webglContext = canvas.getContext('webgl');
+    const webgl2Context = canvas.getContext('webgl2');
+
+    const result = {
+      webglSupported: webglContext !== null,
+      webgl2Supported: webgl2Context !== null,
+      vendor: null,
+      renderer: null,
+      version: null
+    };
+
+    // WebGL基本情報を取得
+    if (webglContext) {
+      result.vendor = webglContext.getParameter(webglContext.VENDOR);
+      result.renderer = webglContext.getParameter(webglContext.RENDERER);
+      result.version = webglContext.getParameter(webglContext.VERSION);
+    }
+
+    return result;
   }
 }
