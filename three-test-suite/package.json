@@ -17,13 +17,14 @@
     "jest-environment-jsdom": "^29.5.0"
   },
   "jest": {
-    "preset": "@jest/preset-default",
     "testEnvironment": "jsdom",
     "extensionsToTreatAsEsm": [".js"],
     "globals": {
       "__DEV__": true
     },
     "transform": {},
-    "testTimeout": 30000
+    "testTimeout": 30000,
+    "moduleFileExtensions": ["js", "json"],
+    "testMatch": ["**/__tests__/**/*.js", "**/?(*.)+(spec|test).js"]
   }
 }
