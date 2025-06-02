@@ -227,6 +227,135 @@ describe('PuppeteerManager - WebAssembly機能', () => {
   });
 });
 
+describe('PuppeteerManager - WASM + WebGL連携機能', () => {
+  test('WebAssemblyとWebGLが同時に利用可能', async () => {
+    const manager = new PuppeteerManager();
+    await manager.initialize();
+    
+    const capabilities = await manager.getHybridCapabilities();
+    
+    expect(capabilities.wasmSupported).toBe(true);
+    expect(capabilities.webglSupported).toBe(true);
+    expect(capabilities.hybridReady).toBe(true);
+    
+    await manager.cleanup();
+  });
+
+  test('WASM計算結果をWebGLで描画できる', async () => {
+    const manager = new PuppeteerManager();
+    await manager.initialize();
+    
+    const testScript = () => {
+      // WASMで頂点データを計算してWebGLで描画
+      window.hybridTestResult = 'pending';
+      
+      // 簡単なWASMモジュール（頂点座標計算用）
+      const wasmBytes = new Uint8Array([
+        0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00, 0x01, 0x07, 0x01, 0x60, 0x02, 0x7f, 0x7f, 0x01,
+        0x7f, 0x03, 0x02, 0x01, 0x00, 0x07, 0x0a, 0x01, 0x06, 0x61, 0x64, 0x64, 0x54, 0x77, 0x6f, 0x00,
+        0x00, 0x0a, 0x09, 0x01, 0x07, 0x00, 0x20, 0x00, 0x20, 0x01, 0x6a, 0x0b
+      ]);
+      
+      WebAssembly.instantiate(wasmBytes).then(result => {
+        const addTwo = result.instance.exports.addTwo;
+        
+        // WASMで計算
+        const vertices = [
+          addTwo(0, 0), addTwo(1, 0), addTwo(0, 0),  // 頂点1
+          addTwo(1, 0), addTwo(1, 0), addTwo(0, 0),  // 頂点2
+          addTwo(0, 1), addTwo(1, 0), addTwo(0, 0)   // 頂点3
+        ];
+        
+        // WebGLで描画
+        const canvas = document.createElement('canvas');
+        const gl = canvas.getContext('webgl');
+        
+        if (gl && vertices.length === 9) {
+          const buffer = gl.createBuffer();
+          gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+          gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STATIC_DRAW);
+          
+          window.hybridTestResult = 'success';
+        } else {
+          window.hybridTestResult = 'failed';
+        }
+      }).catch(() => {
+        window.hybridTestResult = 'error';
+      });
+    };
+    
+    const html = manager.generateTestHTML(testScript);
+    await manager.page.setContent(html);
+    
+    // 結果を待機
+    await manager.page.waitForFunction('window.hybridTestResult !== "pending"', { timeout: 5000 });
+    
+    const result = await manager.page.evaluate(() => window.hybridTestResult);
+    expect(result).toBe('success');
+    
+    await manager.cleanup();
+  });
+
+  test('getHybridCapabilities()メソッドで連携情報を取得できる', async () => {
+    const manager = new PuppeteerManager();
+    await manager.initialize();
+    
+    const capabilities = await manager.getHybridCapabilities();
+    
+    expect(capabilities).toBeDefined();
+    expect(capabilities.wasmSupported).toBeDefined();
+    expect(capabilities.webglSupported).toBeDefined();
+    expect(capabilities.hybridReady).toBeDefined();
+    expect(capabilities.performanceProfile).toBeDefined();
+    expect(capabilities.recommendedStrategy).toBeDefined();
+    
+    await manager.cleanup();
+  });
+
+  test('benchmarkHybridPerformance()でWASM+WebGL性能を測定できる', async () => {
+    const manager = new PuppeteerManager();
+    await manager.initialize();
+    
+    const performance = await manager.benchmarkHybridPerformance();
+    
+    expect(performance).toBeDefined();
+    expect(performance.wasmComputeTime).toBeGreaterThan(0);
+    expect(performance.webglRenderTime).toBeGreaterThan(0);
+    expect(performance.dataTransferTime).toBeGreaterThan(0);
+    expect(performance.totalTime).toBeGreaterThan(0);
+    expect(performance.efficiency).toBeGreaterThan(0);
+    
+    await manager.cleanup();
+  });
+
+  test('大量データ処理でのWASM+WebGL連携パフォーマンス', async () => {
+    const manager = new PuppeteerManager();
+    await manager.initialize();
+    
+    const performance = await manager.benchmarkHybridPerformance({ 
+      dataSize: 10000,
+      iterations: 100 
+    });
+    
+    expect(performance.totalTime).toBeLessThan(5000); // 5秒以内
+    expect(performance.efficiency).toBeGreaterThan(0.5); // 効率50%以上
+    
+    await manager.cleanup();
+  });
+
+  test('getHybridCapabilities()は初期化前に呼ぶとエラーを投げる', async () => {
+    const manager = new PuppeteerManager();
+    
+    await expect(manager.getHybridCapabilities()).rejects.toThrow('PuppeteerManager is not initialized');
+  });
+
+  test('benchmarkHybridPerformance()は初期化前に呼ぶとエラーを投げる', async () => {
+    const manager = new PuppeteerManager();
+    
+    await expect(manager.benchmarkHybridPerformance()).rejects.toThrow('PuppeteerManager is not initialized');
+  });
+});
+
 describe('PuppeteerManager - HTMLテンプレート', () => {
   test('基本HTMLテンプレートが生成される', () => {
     const manager = new PuppeteerManager();
