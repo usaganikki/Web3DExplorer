@@ -5,8 +5,8 @@
   "type": "module",
   "main": "src/index.js",
   "scripts": {
-    "test": "jest",
-    "test:watch": "jest --watch"
+    "test": "node --experimental-vm-modules node_modules/.bin/jest",
+    "test:watch": "node --experimental-vm-modules node_modules/.bin/jest --watch"
   },
   "dependencies": {
     "puppeteer": "^22.0.0",
@@ -15,5 +15,15 @@
   "devDependencies": {
     "jest": "^29.5.0",
     "jest-environment-jsdom": "^29.5.0"
+  },
+  "jest": {
+    "preset": "@jest/preset-default",
+    "testEnvironment": "jsdom",
+    "extensionsToTreatAsEsm": [".js"],
+    "globals": {
+      "__DEV__": true
+    },
+    "transform": {},
+    "testTimeout": 30000
   }
 }
