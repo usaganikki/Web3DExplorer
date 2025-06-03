@@ -87,7 +87,7 @@ export class ThreeTestSuite {
    * @returns {string} HTMLコンテンツ
    */
   _generateThreeJsHTML(options = {}) {
-    // const threeJsVersion = options.threeJsVersion || '0.163.0'; // この行をコメントアウトまたは削除
+    const threeJsVersion = options.threeJsVersion || '0.173.0'; // デフォルトを0.173.0に
     const title = options.title || 'Three.js Test Scene';
     
     return `<!DOCTYPE html>
@@ -97,29 +97,33 @@ export class ThreeTestSuite {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>${title}</title>
     <style>
-        body {
-            margin: 0;
-            padding: 0;
-            overflow: hidden;
-            background-color: #000;
-        }
-        canvas {
-            display: block;
-        }
+        body { margin: 0; padding: 0; overflow: hidden; background-color: #000; }
+        canvas { display: block; }
     </style>
 </head>
 <body>
-    <script>
-        window.threeJsLoaded = false;
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://cdnjs.cloudflare.com/ajax/libs/three.js/${threeJsVersion}/three.module.min.js"
+        }
+    }
+    </script>
+    <script type="module">
         window.threeJsLoadError = null;
         window.sceneReady = false;
         window.sceneError = null;
+        try {
+            const THREE = await import('three');
+            window.THREE = THREE; // Make THREE globally available for sceneBuilderFunction
+            window.threeJsLoaded = true;
+            // Notify that Three.js is loaded, e.g., by a custom event or a flag
+            // document.dispatchEvent(new CustomEvent('threejsloaded'));
+        } catch (e) {
+            window.threeJsLoadError = 'Failed to load Three.js module from CDN: ' + e.message;
+            console.error(window.threeJsLoadError);
+        }
     </script>
-    <script 
-        src="https://cdnjs.cloudflare.com/ajax/libs/three.js/0.174.0/three.core.min.js" // URLを固定
-        onload="window.threeJsLoaded = true;"
-        onerror="window.threeJsLoadError = 'Failed to load Three.js from CDN';"
-    ></script>
 </body>
 </html>`;
   }
@@ -133,16 +137,16 @@ export class ThreeTestSuite {
       await this.browserManager.page.waitForFunction(
         () => {
           if (window.threeJsLoadError) {
-            throw new Error('Three.js CDN load failed');
+            throw new Error('Three.js CDN load failed: ' + window.threeJsLoadError);
           }
-          
-          return typeof THREE !== 'undefined' && 
-                 typeof THREE.WebGLRenderer === 'function' &&
-                 typeof THREE.Scene === 'function' &&
-                 typeof THREE.PerspectiveCamera === 'function' &&
+          // Check if THREE is globally available and core components are present
+          return typeof window.THREE !== 'undefined' &&
+                 typeof window.THREE.Scene === 'function' &&
+                 typeof window.THREE.PerspectiveCamera === 'function' && // Or other core components
+                 typeof window.THREE.WebGLRenderer === 'function' &&
                  window.threeJsLoaded === true;
-        }, 
-        { 
+        },
+        {
           timeout: timeout,
           polling: 'raf'
         }
@@ -171,24 +175,26 @@ export class ThreeTestSuite {
     try {
       return await this.browserManager.page.evaluate((builderFuncString) => {
         try {
-          if (typeof THREE === 'undefined' || typeof THREE.WebGLRenderer !== 'function') {
+          // Use window.THREE as it's assigned in _generateThreeJsHTML
+          if (typeof window.THREE === 'undefined' || typeof window.THREE.Scene !== 'function') {
             const error = {
-              message: 'THREE or THREE.WebGLRenderer not available in execution context',
+              message: 'THREE or THREE.Scene not available in execution context',
               code: 'THREE_NOT_AVAILABLE'
             };
             window.sceneError = error;
             return { success: false, error };
           }
 
-          const userFunction = new Function(`return (${builderFuncString})`)();
+          // Pass window.THREE to the user function
+          const userFunction = new Function('THREE', `return (${builderFuncString})`)(window.THREE);
           userFunction(); 
           
           window.sceneReady = true; 
           return { success: true }; 
           
         } catch (error) {
-          const errorInfo = { 
-            message: error.message, 
+          const errorInfo = {
+            message: error.message,
             stack: error.stack,
             code: 'SCENE_EXECUTION_ERROR'
           };

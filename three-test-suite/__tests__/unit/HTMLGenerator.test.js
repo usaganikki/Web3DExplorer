@@ -23,7 +23,7 @@ describe('HTMLGenerator - HTMLテンプレート', () => {
   test('基本HTMLテンプレートが生成される', () => {
     const html = htmlGenerator.generateTestHTML(() => {});
     expect(html).toContain('<!DOCTYPE html>');
-    expect(html).toContain('https://cdnjs.cloudflare.com/ajax/libs/three.js/0.128.0/three.min.js'); // デフォルトバージョン確認
+    expect(html).toContain('https://cdnjs.cloudflare.com/ajax/libs/three.js/0.173.0/three.module.min.js'); // デフォルトバージョン確認
     expect(html).toContain('<canvas');
     expect(html).toContain('id="three-canvas"');
   });
@@ -41,15 +41,15 @@ describe('HTMLGenerator - HTMLテンプレート', () => {
   });
 
   test('異なるThree.jsバージョンが指定できる', () => {
-    const customVersion = '0.140.0'; // 0.xxx.xxx 形式に修正
+    const customVersion = '0.173.0'; 
     const html = htmlGenerator.generateTestHTML(() => {}, { threeJsVersion: customVersion });
-    expect(html).toContain(`https://cdnjs.cloudflare.com/ajax/libs/three.js/${customVersion}/three.min.js`); // 0.172.0 より古いので three.min.js
+    expect(html).toContain(`https://cdnjs.cloudflare.com/ajax/libs/three.js/${customVersion}/three.module.min.js`); 
   });
 
   test('異なるThree.jsバージョンが指定できる (0.172.0以降)', () => {
-    const customVersion = '0.172.0';
+    const customVersion = '0.173.0';
     const html = htmlGenerator.generateTestHTML(() => {}, { threeJsVersion: customVersion });
-    expect(html).toContain(`https://cdnjs.cloudflare.com/ajax/libs/three.js/${customVersion}/three.core.min.js`); // 0.172.0 以降なので three.core.min.js
+    expect(html).toContain(`https://cdnjs.cloudflare.com/ajax/libs/three.js/${customVersion}/three.module.min.js`); 
   });
 
   test('自動実行を無効にできる', () => {

@@ -117,20 +117,25 @@ describe('ThreeTestSuite', () => {
       
       expect(html).toContain('<!DOCTYPE html>');
       expect(html).toContain('<title>Three.js Test Scene</title>');
-      expect(html).toContain('three.js/0.163.0/three.min.js');
-      expect(html).toContain('window.threeJsLoaded = false');
+      expect(html).toContain('<script type="importmap">');
+      expect(html).toContain('"three": "https://cdnjs.cloudflare.com/ajax/libs/three.js/0.173.0/three.module.min.js"');
+      expect(html).toContain('<script type="module">');
+      expect(html).toContain('window.THREE = THREE;');
+      expect(html).toContain('window.threeJsLoaded = true;');
     });
 
     it('should generate HTML with custom options', () => {
       const options = {
         title: 'Custom Test Scene',
-        threeJsVersion: '0.150.0'
+        threeJsVersion: '0.173.0' // カスタムバージョンを0.173.0に
       };
       
       const html = threeTestSuite._generateThreeJsHTML(options);
       
       expect(html).toContain('<title>Custom Test Scene</title>');
-      expect(html).toContain('three.js/0.150.0/three.min.js');
+      expect(html).toContain('<script type="importmap">');
+      expect(html).toContain('"three": "https://cdnjs.cloudflare.com/ajax/libs/three.js/0.173.0/three.module.min.js"');
+      expect(html).toContain('<script type="module">');
     });
   });
 

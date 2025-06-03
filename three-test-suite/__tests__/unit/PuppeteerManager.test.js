@@ -45,7 +45,7 @@ describe('PuppeteerManager - ファサードクラスとしてのテスト', () 
 
   test('generateTestHTMLがHTMLGeneratorに委譲される', () => {
     const html = manager.generateTestHTML(() => {});
-    expect(html).toContain('three.core.min.js');
+    expect(html).toContain('three.module.min.js');
   });
   
   test('page getterがBrowserManagerのpageを返す', () => {
