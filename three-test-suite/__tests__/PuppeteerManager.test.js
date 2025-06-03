@@ -231,14 +231,23 @@ describe('PuppeteerManager - Three.jsシーン注入', () => {
   }, 90000);
 
   test('タイムアウトエラーのハンドリング', async () => {
-    await expect(manager.loadThreeScene(() => {
-      // 意図的に長時間かかる処理
+    // スクリプト実行タイムアウトをテストするため、page.evaluateに直接長時間実行をかける
+    const timeoutPromise = manager.loadThreeScene(() => {
+      // シーンセットアップは正常に行う
+      const scene = new THREE.Scene();
+      const camera = new THREE.PerspectiveCamera();
+      const renderer = new THREE.WebGLRenderer();
+      
+      // 意図的に長時間処理を実行してタイムアウトを発生させる
       const start = Date.now();
-      while (Date.now() - start < 6000) {
-        // 6秒間ブロック
+      while (Date.now() - start < 8000) {
+        // 8秒間ブロック（3秒のタイムアウトを超える）
+        // Note: this will block the browser thread
       }
     }, {
       timeout: 3000 // 3秒でタイムアウト
-    })).rejects.toThrow(/timeout|timed out/i);
+    });
+
+    await expect(timeoutPromise).rejects.toThrow(/timeout|timed out/i);
   }, 30000);
 });
