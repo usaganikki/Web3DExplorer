@@ -21,7 +21,6 @@
   "jest": {
     "forceExit": true,
     "detectOpenHandles": true,
-    "testTimeout": 60000,
     "projects": [
       {
         "displayName": "puppeteer-tests",
@@ -33,8 +32,7 @@
           "**/*ScreenshotCapture*.test.js",
           "**/*ThreeTestRenderer*.test.js"
         ],
-        "testEnvironment": "node",
-        "timeout": 60000
+        "testEnvironment": "node"
       },
       {
         "displayName": "dom-tests",
@@ -45,8 +43,7 @@
           "**/*ObjectValidator*.test.js",
           "**/*TransformValidator*.test.js"
         ],
-        "testEnvironment": "jsdom",
-        "timeout": 30000
+        "testEnvironment": "jsdom"
       }
     ]
   }
