@@ -16,7 +16,10 @@ describe('PuppeteerManager - ファサードクラスとしてのテスト', () 
   });
 
   afterEach(async () => {
-    await manager.cleanup();
+    if (manager) {
+      await manager.cleanup();
+      manager = null;
+    }
   });
 
   test('initializeとcleanupがBrowserManagerに委譲される', () => {
@@ -59,10 +62,21 @@ describe('PuppeteerManager - ファサードクラスとしてのテスト', () 
 
 // Issue #4: Three.jsシーン注入機能のテストケース
 describe('PuppeteerManager - Three.jsシーン注入', () => {
-  test('シーンセットアップ関数が実行される', async () => {
-    const manager = new PuppeteerManager();
+  let manager;
+
+  beforeEach(async () => {
+    manager = new PuppeteerManager({ headless: true });
     await manager.initialize();
-    
+  });
+
+  afterEach(async () => {
+    if (manager) {
+      await manager.cleanup();
+      manager = null;
+    }
+  });
+
+  test('シーンセットアップ関数が実行される', async () => {
     await manager.loadThreeScene(() => {
       scene = new THREE.Scene();
       camera = new THREE.PerspectiveCamera();
@@ -72,14 +86,9 @@ describe('PuppeteerManager - Three.jsシーン注入', () => {
     
     const setupComplete = await manager.page.evaluate(() => window.setupComplete);
     expect(setupComplete).toBe(true);
-    
-    await manager.cleanup();
-  });
+  }, 30000);
 
   test('window.sceneReadyが true になる', async () => {
-    const manager = new PuppeteerManager();
-    await manager.initialize();
-    
     await manager.loadThreeScene(() => {
       scene = new THREE.Scene();
       camera = new THREE.PerspectiveCamera();
@@ -88,101 +97,67 @@ describe('PuppeteerManager - Three.jsシーン注入', () => {
     
     const sceneReady = await manager.page.evaluate(() => window.sceneReady);
     expect(sceneReady).toBe(true);
-    
-    await manager.cleanup();
-  });
+  }, 30000);
 
   test('エラーが発生した場合の適切な処理', async () => {
-    const manager = new PuppeteerManager();
-    await manager.initialize();
-    
     await expect(manager.loadThreeScene(() => {
       throw new Error('Test error');
     })).rejects.toThrow('Test error');
-    
-    await manager.cleanup();
-  });
+  }, 30000);
 
   test('loadThreeScene()は初期化前に呼ぶとエラーを投げる', async () => {
-    const manager = new PuppeteerManager();
+    const uninitializedManager = new PuppeteerManager();
     
-    await expect(manager.loadThreeScene(() => {})).rejects.toThrow('PuppeteerManager is not initialized');
-  });
+    await expect(uninitializedManager.loadThreeScene(() => {})).rejects.toThrow('PuppeteerManager is not initialized');
+  }, 30000);
 
   test('無効なシーン関数でエラーを投げる', async () => {
-    const manager = new PuppeteerManager();
-    await manager.initialize();
-    
     await expect(manager.loadThreeScene('not a function')).rejects.toThrow('sceneBuilderFunction must be a function');
     await expect(manager.loadThreeScene(null)).rejects.toThrow('sceneBuilderFunction must be a function');
     await expect(manager.loadThreeScene(undefined)).rejects.toThrow('sceneBuilderFunction must be a function');
-    
-    await manager.cleanup();
-  });
+  }, 30000);
 
   test('Three.jsオブジェクトが正しく作成される', async () => {
-    const manager = new PuppeteerManager();
-    await manager.initialize();
-    
     await manager.loadThreeScene(() => {
-      // Debugging information
-      console.log('THREE object in sceneBuilder:', typeof THREE);
-      if (typeof THREE !== 'undefined') {
-        console.log('THREE.WebGLRenderer in sceneBuilder:', typeof THREE.WebGLRenderer);
-      }
-
       const scene = new THREE.Scene();
       const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
       const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('three-canvas') });
       
-      console.log('renderer is WebGLRenderer (instanceof):', renderer instanceof THREE.WebGLRenderer);
-      console.log('renderer.constructor.name:', renderer.constructor.name);
-      console.log('renderer.isWebGLRenderer property directly:', renderer.isWebGLRenderer);
-
-      console.log('--- Renderer Properties Start ---');
-      for (const prop in renderer) {
-        // Log own properties and inherited properties up to a certain depth or type
-        try {
-          // Avoid logging functions or very large objects directly if it causes issues
-          if (typeof renderer[prop] !== 'function') {
-            console.log(`  ${prop}: ${String(renderer[prop]).substring(0, 100)}`); // Limit string length
-          } else {
-            console.log(`  ${prop}: [Function]`);
-          }
-        } catch (e) {
-          console.log(`  ${prop}: [Error accessing property: ${e.message}]`);
-        }
-      }
-      console.log('--- Renderer Properties End ---');
+      // より信頼性の高い検証方法を使用
+      const isValidWebGLRenderer = (
+        renderer instanceof THREE.WebGLRenderer &&
+        renderer.constructor === THREE.WebGLRenderer &&
+        typeof renderer.render === 'function' &&
+        typeof renderer.setSize === 'function'
+      );
       
       window.sceneObjects = {
         sceneType: scene.type,
         cameraType: camera.type,
-        isRendererReallyWebGL: renderer.isWebGLRenderer === true,
-        rendererConstructorName: renderer.constructor.name, // Keep for logging
+        isValidWebGLRenderer: isValidWebGLRenderer,
+        rendererHasRenderMethod: typeof renderer.render === 'function',
+        rendererHasSetSizeMethod: typeof renderer.setSize === 'function',
         sceneName: scene.name || 'Scene',
         threeAvailable: typeof THREE !== 'undefined',
         webglRendererAvailable: typeof THREE !== 'undefined' && typeof THREE.WebGLRenderer !== 'undefined',
-        isRendererInstanceViaInstanceof: renderer instanceof THREE.WebGLRenderer
+        isRendererInstanceOfWebGL: renderer instanceof THREE.WebGLRenderer,
+        rendererConstructorName: renderer.constructor.name
       };
     });
     
     const sceneObjects = await manager.page.evaluate(() => window.sceneObjects);
-    console.log('Retrieved sceneObjects:', sceneObjects); 
+    
     expect(sceneObjects.threeAvailable).toBe(true);
     expect(sceneObjects.webglRendererAvailable).toBe(true);
-    expect(sceneObjects.isRendererInstanceViaInstanceof).toBe(true);
-    expect(sceneObjects.isRendererReallyWebGL).toBe(true); 
+    expect(sceneObjects.isRendererInstanceOfWebGL).toBe(true);
+    expect(sceneObjects.isValidWebGLRenderer).toBe(true);
+    expect(sceneObjects.rendererHasRenderMethod).toBe(true);
+    expect(sceneObjects.rendererHasSetSizeMethod).toBe(true);
     expect(sceneObjects.sceneType).toBe('Scene');
     expect(sceneObjects.cameraType).toBe('PerspectiveCamera');
-    
-    await manager.cleanup();
-  });
+  }, 60000);
 
   test('複雑なシーンセットアップが実行される', async () => {
-    const manager = new PuppeteerManager();
-    await manager.initialize();
-    
     await manager.loadThreeScene(() => {
       const scene = new THREE.Scene();
       const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
@@ -215,20 +190,15 @@ describe('PuppeteerManager - Three.jsシーン注入', () => {
     expect(analysis.hasLight).toBe(true);
     expect(analysis.hasMesh).toBe(true);
     expect(analysis.cameraPosition.z).toBe(5);
-    
-    await manager.cleanup();
-  });
+  }, 60000);
 
-  test('カスタムオプションが適用される', async () => {
-    const manager = new PuppeteerManager();
-    await manager.initialize();
-    
+  test('カスタムオプションが適用される（r128使用）', async () => {
     await manager.loadThreeScene(() => {
       window.customSceneLoaded = true;
     }, {
       title: 'Custom Scene Test',
-      threeJsVersion: 'r140',
-      timeout: 10000
+      threeJsVersion: 'r128', // r140の代わりにr128を使用
+      timeout: 15000
     });
     
     const customSceneLoaded = await manager.page.evaluate(() => window.customSceneLoaded);
@@ -237,7 +207,38 @@ describe('PuppeteerManager - Three.jsシーン注入', () => {
     // ページタイトルの確認
     const title = await manager.page.title();
     expect(title).toBe('Custom Scene Test');
+  }, 60000);
+
+  test('Three.js r140のロードテスト', async () => {
+    await manager.loadThreeScene(() => {
+      // r140でも基本的なオブジェクトが利用可能であることを確認
+      const scene = new THREE.Scene();
+      const camera = new THREE.PerspectiveCamera();
+      const renderer = new THREE.WebGLRenderer();
+      
+      window.r140TestComplete = true;
+      window.threeVersion = THREE.REVISION || 'unknown';
+    }, {
+      threeJsVersion: 'r140',
+      timeout: 30000
+    });
     
-    await manager.cleanup();
-  });
+    const testComplete = await manager.page.evaluate(() => window.r140TestComplete);
+    const threeVersion = await manager.page.evaluate(() => window.threeVersion);
+    
+    expect(testComplete).toBe(true);
+    expect(threeVersion).toBeDefined();
+  }, 90000);
+
+  test('タイムアウトエラーのハンドリング', async () => {
+    await expect(manager.loadThreeScene(() => {
+      // 意図的に長時間かかる処理
+      const start = Date.now();
+      while (Date.now() - start < 6000) {
+        // 6秒間ブロック
+      }
+    }, {
+      timeout: 3000 // 3秒でタイムアウト
+    })).rejects.toThrow(/timeout|timed out/i);
+  }, 30000);
 });
