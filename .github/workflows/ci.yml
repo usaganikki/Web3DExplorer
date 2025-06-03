@@ -33,6 +33,9 @@ jobs:
     # - name: Run tests
     #   run: npm test
 
+    - name: Install three-test-suite dependencies
+      run: cd three-test-suite && npm ci
+
     - name: Run test suite
       run: npm run test:suite
 
