@@ -25,7 +25,13 @@ jobs:
         cache: 'npm'
 
     - name: Install Puppeteer dependencies
-      run: sudo apt-get update && sudo apt-get install -y libgbm-dev
+      run: |
+        # Update package lists
+        sudo apt-get update
+        # Install libgbm-dev, a necessary dependency for running Chrome/Chromium (used by Puppeteer)
+        # in a headless environment. libgbm (Generic Buffer Management) is part of Mesa 3D Graphics Library
+        # and allows buffer management without a display server.
+        sudo apt-get install -y libgbm-dev
 
     - name: Install dependencies
       run: npm ci
