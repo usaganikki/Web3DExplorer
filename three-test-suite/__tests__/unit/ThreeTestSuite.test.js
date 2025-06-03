@@ -2,8 +2,8 @@
  * ThreeTestSuite のテスト
  * Issue #18 Phase1で追加されたThreeTestSuiteクラスの単体テスト
  */
-import { ThreeTestSuite } from '../src/threejs/ThreeTestSuite.js';
-import { BrowserManager } from '../src/BrowserManager.js';
+import { ThreeTestSuite } from '../../src/threejs/ThreeTestSuite.js';
+import { BrowserManager } from '../../src/BrowserManager.js';
 
 describe('ThreeTestSuite', () => {
   let browserManager;

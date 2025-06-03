@@ -1,9 +1,9 @@
-import { PuppeteerManager } from '../src/PuppeteerManager.js';
-import { BrowserManager } from '../src/BrowserManager.js';
-import { EnvironmentInspector } from '../src/EnvironmentInspector.js';
-import { PerformanceTester } from '../src/PerformanceTester.js';
-import { HTMLGenerator } from '../src/HTMLGenerator.js';
-import { ThreeTestSuite } from '../src/threejs/ThreeTestSuite.js';
+import { PuppeteerManager } from '../../src/PuppeteerManager.js';
+import { BrowserManager } from '../../src/BrowserManager.js';
+import { EnvironmentInspector } from '../../src/EnvironmentInspector.js';
+import { PerformanceTester } from '../../src/PerformanceTester.js';
+import { HTMLGenerator } from '../../src/HTMLGenerator.js';
+import { ThreeTestSuite } from '../../src/threejs/ThreeTestSuite.js';
 
 describe('PuppeteerManager - ファサードクラスとしてのテスト', () => {
   let manager;
@@ -45,7 +45,7 @@ describe('PuppeteerManager - ファサードクラスとしてのテスト', () 
 
   test('generateTestHTMLがHTMLGeneratorに委譲される', () => {
     const html = manager.generateTestHTML(() => {});
-    expect(html).toContain('three.min.js');
+    expect(html).toContain('three.core.min.js');
   });
   
   test('page getterがBrowserManagerのpageを返す', () => {

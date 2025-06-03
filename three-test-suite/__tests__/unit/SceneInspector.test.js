@@ -2,9 +2,9 @@
  * SceneInspector のテスト
  * Issue #18 Phase1で追加されたSceneInspectorクラスの単体テスト
  */
-import { SceneInspector } from '../src/threejs/SceneInspector.js';
-import { BrowserManager } from '../src/BrowserManager.js';
-import { HTMLGenerator } from '../src/HTMLGenerator.js';
+import { SceneInspector } from '../../src/threejs/SceneInspector.js';
+import { BrowserManager } from '../../src/BrowserManager.js';
+import { HTMLGenerator } from '../../src/HTMLGenerator.js';
 
 describe('SceneInspector', () => {
   let browserManager;

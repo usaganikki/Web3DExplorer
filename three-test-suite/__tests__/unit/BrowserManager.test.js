@@ -1,4 +1,4 @@
-import { BrowserManager } from '../src/BrowserManager.js';
+import { BrowserManager } from '../../src/BrowserManager.js';
 
 describe('BrowserManager - 基本機能', () => {
   test('正常に初期化できる', async () => {

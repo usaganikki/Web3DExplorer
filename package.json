@@ -10,10 +10,12 @@
     "src"
   ],
   "scripts": {
-    "test": "jest",
-    "test:watch": "jest --watch",
-    "test:coverage": "jest --coverage",
-    "test:suite": "cd three-test-suite && npm test",
+    "test": "npm run test:root",
+    "test:root": "jest --config jest.config.js",
+    "test:root:watch": "jest --config jest.config.js --watch",
+    "test:root:coverage": "jest --config jest.config.js --coverage",
+    "test:watch": "npm run test:root:watch",
+    "test:coverage": "npm run test:root:coverage",
     "dev": "vite",
     "build": "tsc && vite build",
     "type-check": "tsc --noEmit",

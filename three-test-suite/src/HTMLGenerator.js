@@ -20,13 +20,15 @@ export class HTMLGenerator {
 
     const config = {
       title: 'Three.js Test Environment',
-      threeJsVersion: 'r128',
+      threeJsVersion: '0.128.0', // 0.xxx.xxx 形式に修正
       autoExecute: true,
       ...options
     };
 
     const userScriptString = userScript.toString();
-    const threeJsUrl = this._getThreeJsUrl(config.threeJsVersion);
+    // options.threeJsVersion があればそれを使用し、なければ config.threeJsVersion (0.128.0) を使用
+    const versionToUse = options.threeJsVersion || config.threeJsVersion;
+    const threeJsUrl = this._getThreeJsUrl(versionToUse);
 
     const scriptExecution = config.autoExecute
       ? `
@@ -116,43 +118,40 @@ export class HTMLGenerator {
    * @private
    */
   _getThreeJsUrl(version) {
-    const normalizedVersion = version.toLowerCase().replace(/^r/, '');
-    
-    const versionMap = {
-      '128': '0.128.0',
-      '140': '0.140.2',
-      '141': '0.141.0',
-      '142': '0.142.0',
-      '143': '0.143.0',
-      '144': '0.144.0',
-      '145': '0.145.0',
-      '146': '0.146.0',
-      '147': '0.147.0',
-      '148': '0.148.0',
-      '149': '0.149.0',
-      '150': '0.150.1',
-      '151': '0.151.3',
-      '152': '0.152.2',
-      '153': '0.153.0',
-      '154': '0.154.0',
-      '155': '0.155.0',
-      '156': '0.156.1',
-      '157': '0.157.0',
-      '158': '0.158.0',
-      '159': '0.159.0',
-      '160': '0.160.1',
-      '161': '0.161.0',
-      '162': '0.162.0',
-      '163': '0.163.0'
-    };
+    const defaultVersion = '0.172.0'; // ユーザー指示の基本バージョン
+    const cdnjsBaseUrl = 'https://cdnjs.cloudflare.com/ajax/libs/three.js/';
 
-    const mappedVersion = versionMap[normalizedVersion];
-    
-    if (mappedVersion) {
-      return `https://unpkg.com/three@${mappedVersion}/build/three.min.js`;
-    } else {
-      console.warn(`Unknown Three.js version: ${version}, falling back to r128`);
-      return `https://unpkg.com/three@0.128.0/build/three.min.js`;
+    let targetVersion = version || defaultVersion;
+    let fileName;
+
+    // バージョン形式のバリデーション: '0.xxx.xxx' 形式であること
+    const versionRegex = /^\d+\.\d+\.\d+$/;
+    if (!versionRegex.test(targetVersion)) {
+      throw new Error(`Invalid Three.js version format: "${targetVersion}". Expected format "0.xxx.xxx".`);
     }
+
+    // バージョン比較 (簡易版、セマンティックバージョニングのフルサポートではない)
+    const targetParts = targetVersion.split('.').map(Number);
+    const baseParts = defaultVersion.split('.').map(Number); // 0.172.0
+
+    let isTargetGreaterOrEqualBase = true;
+    for (let i = 0; i < 3; i++) {
+      if (targetParts[i] > baseParts[i]) {
+        isTargetGreaterOrEqualBase = true;
+        break;
+      }
+      if (targetParts[i] < baseParts[i]) {
+        isTargetGreaterOrEqualBase = false;
+        break;
+      }
+    }
+
+    if (isTargetGreaterOrEqualBase) {
+      fileName = 'three.core.min.js'; // 0.172.0 以降
+    } else {
+      fileName = 'three.min.js'; // 0.172.0 より古い
+    }
+
+    return `${cdnjsBaseUrl}${targetVersion}/${fileName}`;
   }
 }

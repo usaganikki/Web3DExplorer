@@ -87,7 +87,7 @@ export class ThreeTestSuite {
    * @returns {string} HTMLコンテンツ
    */
   _generateThreeJsHTML(options = {}) {
-    const threeJsVersion = options.threeJsVersion || '0.163.0';
+    // const threeJsVersion = options.threeJsVersion || '0.163.0'; // この行をコメントアウトまたは削除
     const title = options.title || 'Three.js Test Scene';
     
     return `<!DOCTYPE html>
@@ -116,7 +116,7 @@ export class ThreeTestSuite {
         window.sceneError = null;
     </script>
     <script 
-        src="https://cdnjs.cloudflare.com/ajax/libs/three.js/${threeJsVersion}/three.min.js"
+        src="https://cdnjs.cloudflare.com/ajax/libs/three.js/0.174.0/three.core.min.js" // URLを固定
         onload="window.threeJsLoaded = true;"
         onerror="window.threeJsLoadError = 'Failed to load Three.js from CDN';"
     ></script>
