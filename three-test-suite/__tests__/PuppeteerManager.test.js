@@ -1,8 +1,5 @@
 import { PuppeteerManager } from '../src/PuppeteerManager.js';
 import { BrowserManager } from '../src/BrowserManager.js';
-// EnvironmentInspector, PerformanceTester, HTMLGenerator は PuppeteerManager 経由でテストされるため、
-// 個別のテストファイルで import されていればここでは不要な場合がありますが、
-// 既存のテスト構造を維持し、PuppeteerManager のファサードとしてのテストで型情報として利用される可能性を考慮し残します。
 import { EnvironmentInspector } from '../src/EnvironmentInspector.js';
 import { PerformanceTester } from '../src/PerformanceTester.js';
 import { HTMLGenerator } from '../src/HTMLGenerator.js';
@@ -11,7 +8,7 @@ describe('PuppeteerManager - ファサードクラスとしてのテスト', () 
   let manager;
 
   beforeEach(async () => {
-    manager = new PuppeteerManager({ headless: true }); // Use default options
+    manager = new PuppeteerManager({ headless: true });
     await manager.initialize();
   });
 
@@ -24,8 +21,6 @@ describe('PuppeteerManager - ファサードクラスとしてのテスト', () 
 
   test('initializeとcleanupがBrowserManagerに委譲される', () => {
     expect(manager.browserManager).toBeInstanceOf(BrowserManager);
-    // initialize and cleanup are called in beforeEach/afterEach
-    // We can check if they were called by checking the state
     expect(manager.isInitialized()).toBe(true);
   });
 
@@ -59,8 +54,6 @@ describe('PuppeteerManager - ファサードクラスとしてのテスト', () 
   });
 });
 
-
-// Issue #4: Three.jsシーン注入機能のテストケース
 describe('PuppeteerManager - Three.jsシーン注入', () => {
   let manager;
 
@@ -123,7 +116,6 @@ describe('PuppeteerManager - Three.jsシーン注入', () => {
       const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
       const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('three-canvas') });
       
-      // より信頼性の高い検証方法を使用
       const isValidWebGLRenderer = (
         renderer instanceof THREE.WebGLRenderer &&
         renderer.constructor === THREE.WebGLRenderer &&
@@ -163,13 +155,11 @@ describe('PuppeteerManager - Three.jsシーン注入', () => {
       const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
       const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('three-canvas') });
       
-      // 立方体を作成
       const geometry = new THREE.BoxGeometry();
       const material = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
       const cube = new THREE.Mesh(geometry, material);
       scene.add(cube);
       
-      // ライトを追加
       const light = new THREE.DirectionalLight(0xffffff, 1);
       scene.add(light);
       
@@ -186,32 +176,30 @@ describe('PuppeteerManager - Three.jsシーン注入', () => {
     });
     
     const analysis = await manager.page.evaluate(() => window.sceneAnalysis);
-    expect(analysis.objectCount).toBe(2); // cube + light
+    expect(analysis.objectCount).toBe(2);
     expect(analysis.hasLight).toBe(true);
     expect(analysis.hasMesh).toBe(true);
     expect(analysis.cameraPosition.z).toBe(5);
   });
 
-  test('カスタムオプションが適用される（r128使用）', async () => {
+  test('カスタムオプションが適用される', async () => {
     await manager.loadThreeScene(() => {
       window.customSceneLoaded = true;
     }, {
       title: 'Custom Scene Test',
-      threeJsVersion: 'r128', // r140の代わりにr128を使用
+      threeJsVersion: 'r128',
       timeout: 15000
     });
     
     const customSceneLoaded = await manager.page.evaluate(() => window.customSceneLoaded);
     expect(customSceneLoaded).toBe(true);
     
-    // ページタイトルの確認
     const title = await manager.page.title();
     expect(title).toBe('Custom Scene Test');
   });
 
   test('Three.js r140のロードテスト', async () => {
     await manager.loadThreeScene(() => {
-      // r140でも基本的なオブジェクトが利用可能であることを確認
       const scene = new THREE.Scene();
       const camera = new THREE.PerspectiveCamera();
       const renderer = new THREE.WebGLRenderer();
@@ -229,8 +217,4 @@ describe('PuppeteerManager - Three.jsシーン注入', () => {
     expect(testComplete).toBe(true);
     expect(threeVersion).toBeDefined();
   });
-
-  // タイムアウトテストを削除または簡素化
-  // 実際のプロダクションコードでは、タイムアウトエラーのハンドリングより
-  // 正常な機能動作が重要であるため、このテストは削除します
 });
