@@ -30,7 +30,9 @@
           "**/*EnvironmentInspector*.test.js",
           "**/*PerformanceTester*.test.js",
           "**/*ScreenshotCapture*.test.js",
-          "**/*ThreeTestRenderer*.test.js"
+          "**/*ThreeTestRenderer*.test.js",
+          "**/*ThreeTestSuite*.test.js",
+          "**/*SceneInspector*.test.js"
         ],
         "testEnvironment": "node"
       },
