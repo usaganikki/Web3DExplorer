@@ -49,6 +49,21 @@ export class BrowserManager {
       });
 
       this.page = await this.browser.newPage();
+
+      // Forward browser console logs to Node console
+      this.page.on('console', msg => {
+        const type = msg.type();
+        const text = msg.text();
+        // Jestのテスト出力と区別しやすくするためにプレフィックスを付ける
+        // また、エラーや警告は適切に Node の console.error/warn にマッピングする
+        if (type === 'error') {
+          console.error(`PAGE LOG (Error): ${text}`);
+        } else if (type === 'warning') {
+          console.warn(`PAGE LOG (Warning): ${text}`);
+        } else {
+          console.log(`PAGE LOG (${type}): ${text}`);
+        }
+      });
       
       await this.page.setViewport({
         width: this.options.width,

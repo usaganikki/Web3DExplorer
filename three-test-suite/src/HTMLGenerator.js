@@ -14,7 +14,6 @@ export class HTMLGenerator {
    * @throws {Error} ユーザースクリプトが無効な場合
    */
   generateTestHTML(userScript, options = {}) {
-    // 引数の検証
     if (typeof userScript !== 'function') {
       throw new Error('userScript must be a function');
     }
@@ -27,18 +26,24 @@ export class HTMLGenerator {
     };
 
     const userScriptString = userScript.toString();
-    const threeJsUrl = `https://cdnjs.cloudflare.com/ajax/libs/three.js/${config.threeJsVersion}/three.min.js`;
+    const threeJsUrl = this._getThreeJsUrl(config.threeJsVersion);
 
-    // スクリプト実行部分を生成
     const scriptExecution = config.autoExecute
       ? `
-        // Wait for Three.js to load
         window.addEventListener('load', function() {
-            // Execute user script
-            (${userScriptString})();
+            try {
+                if (typeof THREE === 'undefined') {
+                    console.error('Three.js failed to load');
+                    window.threeJsLoadError = true;
+                    return;
+                }
+                (${userScriptString})();
+            } catch (error) {
+                console.error('Error executing user script:', error);
+                window.userScriptError = error;
+            }
         });`
       : `
-        // User script is available but not auto-executed
         window.userScript = ${userScriptString};`;
 
     return `<!DOCTYPE html>
@@ -80,13 +85,74 @@ export class HTMLGenerator {
         Debug info will appear here
     </div>
     
-    <!-- Three.js CDN -->
-    <script src="${threeJsUrl}"></script>
+    <script>
+        window.threeJsLoadError = false;
+        
+        (function() {
+            var script = document.createElement('script');
+            script.src = '${threeJsUrl}';
+            script.onload = function() {
+                console.log('Three.js loaded successfully');
+                window.threeJsLoaded = true;
+            };
+            script.onerror = function() {
+                console.error('Failed to load Three.js from:', script.src);
+                window.threeJsLoadError = true;
+            };
+            document.head.appendChild(script);
+        })();
+    </script>
     
-    <!-- User Script -->
     <script>${scriptExecution}
     </script>
 </body>
 </html>`;
+  }
+
+  /**
+   * Three.jsのバージョンに応じた適切なCDN URLを生成する
+   * @param {string} version - Three.jsのバージョン
+   * @returns {string} CDN URL
+   * @private
+   */
+  _getThreeJsUrl(version) {
+    const normalizedVersion = version.toLowerCase().replace(/^r/, '');
+    
+    const versionMap = {
+      '128': '0.128.0',
+      '140': '0.140.2',
+      '141': '0.141.0',
+      '142': '0.142.0',
+      '143': '0.143.0',
+      '144': '0.144.0',
+      '145': '0.145.0',
+      '146': '0.146.0',
+      '147': '0.147.0',
+      '148': '0.148.0',
+      '149': '0.149.0',
+      '150': '0.150.1',
+      '151': '0.151.3',
+      '152': '0.152.2',
+      '153': '0.153.0',
+      '154': '0.154.0',
+      '155': '0.155.0',
+      '156': '0.156.1',
+      '157': '0.157.0',
+      '158': '0.158.0',
+      '159': '0.159.0',
+      '160': '0.160.1',
+      '161': '0.161.0',
+      '162': '0.162.0',
+      '163': '0.163.0'
+    };
+
+    const mappedVersion = versionMap[normalizedVersion];
+    
+    if (mappedVersion) {
+      return `https://unpkg.com/three@${mappedVersion}/build/three.min.js`;
+    } else {
+      console.warn(`Unknown Three.js version: ${version}, falling back to r128`);
+      return `https://unpkg.com/three@0.128.0/build/three.min.js`;
+    }
   }
 }
