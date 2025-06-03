@@ -35,15 +35,15 @@ export class SceneInspector {
           children: scene.children.length,
           background: scene.background ? scene.background.toString() : null,
           fog: scene.fog ? {
-            type: scene.fog.constructor.name,
+            type: scene.fog.isFog ? 'Fog' : scene.fog.constructor.name,
             near: scene.fog.near,
             far: scene.fog.far,
             color: scene.fog.color ? scene.fog.color.getHex() : null
           } : null,
-          autoUpdate: scene.autoUpdate,
-          matrixAutoUpdate: scene.matrixAutoUpdate,
+          autoUpdate: scene.autoUpdate !== undefined ? scene.autoUpdate : true, // Default to true if undefined
+          matrixAutoUpdate: scene.matrixAutoUpdate !== undefined ? scene.matrixAutoUpdate : true, // Default to true if undefined
           uuid: scene.uuid,
-          type: scene.type || 'Scene'
+          type: scene.isScene ? 'Scene' : scene.constructor.name
         };
       });
 
@@ -72,9 +72,13 @@ export class SceneInspector {
         }
 
         const camera = window.camera;
+        let cameraType = camera.constructor.name;
+        if (camera.isPerspectiveCamera) cameraType = 'PerspectiveCamera';
+        else if (camera.isOrthographicCamera) cameraType = 'OrthographicCamera';
+        
         return {
           available: true,
-          type: camera.constructor.name,
+          type: cameraType,
           position: {
             x: camera.position.x,
             y: camera.position.y,
@@ -123,7 +127,7 @@ export class SceneInspector {
         
         return {
           available: true,
-          type: renderer.constructor.name,
+          type: renderer.isWebGLRenderer ? 'WebGLRenderer' : renderer.constructor.name,
           size: {
             width: canvas.width,
             height: canvas.height

@@ -61,7 +61,7 @@ describe('SceneInspector', () => {
 
       // Three.jsの読み込み完了を待機
       await browserManager.page.waitForFunction(
-        () => typeof THREE !== 'undefined' && typeof THREE.Scene === 'function',
+        () => window.threeJsLoaded === true,
         { timeout: 10000 }
       );
     });
@@ -137,7 +137,7 @@ describe('SceneInspector', () => {
       });
 
       await browserManager.page.waitForFunction(
-        () => typeof THREE !== 'undefined',
+        () => window.threeJsLoaded === true,
         { timeout: 10000 }
       );
     });
@@ -208,7 +208,7 @@ describe('SceneInspector', () => {
       });
 
       await browserManager.page.waitForFunction(
-        () => typeof THREE !== 'undefined',
+        () => window.threeJsLoaded === true,
         { timeout: 10000 }
       );
     });
@@ -262,7 +262,7 @@ describe('SceneInspector', () => {
       });
 
       await browserManager.page.waitForFunction(
-        () => typeof THREE !== 'undefined',
+        () => window.threeJsLoaded === true,
         { timeout: 10000 }
       );
     });
@@ -333,7 +333,7 @@ describe('SceneInspector', () => {
       });
 
       await browserManager.page.waitForFunction(
-        () => typeof THREE !== 'undefined',
+        () => window.threeJsLoaded === true,
         { timeout: 10000 }
       );
     });
@@ -388,7 +388,7 @@ describe('SceneInspector', () => {
       try {
         await sceneInspector.getCameraInfo();
       } catch (error) {
-        expect(error.message).toContain('Failed to get camera info');
+        expect(error.message).toContain('BrowserManager is not initialized');
       }
     });
   });

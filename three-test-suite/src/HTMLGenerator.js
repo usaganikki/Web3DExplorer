@@ -88,19 +88,18 @@ export class HTMLGenerator {
     
     <script>
         window.threeJsLoadError = false;
-        
-        (function() {
-            var script = document.createElement('script');
-            script.src = '${threeJsUrl}';
-            script.onload = function() {
+        window.threeJsLoaded = false; // 初期状態を false に設定
+
+        (async function() {
+            try {
+                const THREE_MODULE = await import('${threeJsUrl}');
+                window.THREE = THREE_MODULE;
                 console.log('Three.js loaded successfully');
                 window.threeJsLoaded = true;
-            };
-            script.onerror = function() {
-                console.error('Failed to load Three.js from:', script.src);
+            } catch (e) {
+                console.error('Failed to load Three.js from:', '${threeJsUrl}', e);
                 window.threeJsLoadError = true;
-            };
-            document.head.appendChild(script);
+            }
         })();
     </script>
     
