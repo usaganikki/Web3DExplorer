@@ -2,10 +2,12 @@ import { BrowserManager } from './BrowserManager.js';
 import { EnvironmentInspector } from './EnvironmentInspector.js';
 import { PerformanceTester } from './PerformanceTester.js';
 import { HTMLGenerator } from './HTMLGenerator.js';
+import { ThreeTestSuite } from './threejs/ThreeTestSuite.js';
 
 /**
  * PuppeteerManager
  * Three.js テスト用のPuppeteer関連機能を統括するクラス
+ * Three.js機能はThreeTestSuiteに移行済み（Issue #18 Phase1対応）
  */
 export class PuppeteerManager {
   constructor(options = {}) {
@@ -13,10 +15,14 @@ export class PuppeteerManager {
     this.environmentInspector = new EnvironmentInspector(this.browserManager);
     this.performanceTester = new PerformanceTester(this.browserManager);
     this.htmlGenerator = new HTMLGenerator();
+    
+    // Three.js専用テストスイートを追加
+    this.threeTestSuite = new ThreeTestSuite(this.browserManager);
   }
 
   async initialize() {
     await this.browserManager.initialize();
+    await this.threeTestSuite.initialize();
   }
 
   async cleanup() {
@@ -39,6 +45,7 @@ export class PuppeteerManager {
     return this.browserManager.options;
   }
 
+  // === 既存の環境・パフォーマンス関連メソッド ===
   async getWebGLInfo() {
     return this.environmentInspector.getWebGLInfo();
   }
@@ -63,128 +70,53 @@ export class PuppeteerManager {
     return this.htmlGenerator.generateTestHTML(userScript, options);
   }
 
+  // === Three.js関連メソッド（ThreeTestSuiteへの委任） ===
+  
   /**
    * Three.jsシーンをロードし、指定されたセットアップ関数を実行する
+   * @deprecated このメソッドはThreeTestSuite.loadThreeSceneに移行されました
+   * 互換性のため残されていますが、直接threeTestSuite.loadThreeScene()を使用することを推奨
    * @param {Function} sceneBuilderFunction - Three.jsのシーンをセットアップする関数
    * @param {Object} options - ロードオプション (title, threeJsVersion, timeoutなど)
    * @returns {Promise<void>}
    */
   async loadThreeScene(sceneBuilderFunction, options = {}) {
-    if (!this.isInitialized()) {
-      throw new Error('PuppeteerManager is not initialized');
-    }
-    if (typeof sceneBuilderFunction !== 'function') {
-      throw new Error('sceneBuilderFunction must be a function');
-    }
-
-    const defaultTimeout = 30000;
-    const loadTimeout = options.timeout || defaultTimeout;
-
-    try {
-      const htmlContent = this.htmlGenerator.generateTestHTML(
-        () => {}, 
-        { ...options, autoExecute: false } 
-      );
-
-      await this.page.setContent(htmlContent, {
-        waitUntil: 'networkidle0', 
-        timeout: loadTimeout,
-      });
-
-      await this._waitForThreeJsLoad(loadTimeout);
-
-      const executionResult = await this._executeSceneBuilder(sceneBuilderFunction);
-      
-      if (!executionResult.success) {
-        const error = new Error(executionResult.error.message);
-        if (executionResult.error.stack) {
-          error.stack = executionResult.error.stack;
-        }
-        throw error;
-      }
-
-    } catch (error) {
-      if (error.message && error.message.includes('timeout')) {
-        throw new Error(`Three.js scene loading timed out after ${loadTimeout}ms: ${error.message}`);
-      }
-      throw error;
-    }
+    return this.threeTestSuite.loadThreeScene(sceneBuilderFunction, options);
   }
 
-  async _waitForThreeJsLoad(timeout) {
-    try {
-      await this.page.waitForFunction(
-        () => {
-          if (window.threeJsLoadError) {
-            throw new Error('Three.js CDN load failed');
-          }
-          
-          return typeof THREE !== 'undefined' && 
-                 typeof THREE.WebGLRenderer === 'function' &&
-                 typeof THREE.Scene === 'function' &&
-                 typeof THREE.PerspectiveCamera === 'function' &&
-                 window.threeJsLoaded === true;
-        }, 
-        { 
-          timeout: timeout,
-          polling: 'raf'
-        }
-      );
-    } catch (error) {
-      const loadError = await this.page.evaluate(() => window.threeJsLoadError);
-      const threeAvailable = await this.page.evaluate(() => typeof THREE !== 'undefined');
-      
-      if (loadError) {
-        throw new Error('Three.js failed to load from CDN');
-      } else if (!threeAvailable) {
-        throw new Error(`Three.js did not load within ${timeout}ms`);
-      } else if (error.message.includes('timeout')) {
-        throw new Error(`Three.js loading timed out after ${timeout}ms`);
-      }
-      throw new Error(`Three.js loading error: ${error.message}`);
-    }
+  /**
+   * 包括的なThree.jsテストを実行
+   * ThreeTestSuiteに委任
+   * @returns {Promise<Object>} テスト結果
+   */
+  async runComprehensiveTest() {
+    return this.threeTestSuite.runComprehensiveTest();
   }
 
-  async _executeSceneBuilder(sceneBuilderFunction) {
-    try {
-      return await this.page.evaluate((builderFuncString) => {
-        try {
-          if (typeof THREE === 'undefined' || typeof THREE.WebGLRenderer !== 'function') {
-            const error = {
-              message: 'THREE or THREE.WebGLRenderer not available in execution context',
-              code: 'THREE_NOT_AVAILABLE'
-            };
-            window.sceneError = error;
-            return { success: false, error };
-          }
+  /**
+   * 表示中のオブジェクトを取得
+   * ThreeTestSuiteに委任（将来的にObjectAnalyzerで実装予定）
+   * @returns {Promise<Array>} 表示中のオブジェクト一覧
+   */
+  async getVisibleObjects() {
+    return this.threeTestSuite.getVisibleObjects();
+  }
 
-          const userFunction = new Function(`return (${builderFuncString})`)();
-          userFunction(); 
-          
-          window.sceneReady = true; 
-          return { success: true }; 
-          
-        } catch (error) {
-          const errorInfo = { 
-            message: error.message, 
-            stack: error.stack,
-            code: 'SCENE_EXECUTION_ERROR'
-          };
-          window.sceneError = errorInfo;
-          console.error('Error in sceneBuilderFunction:', error);
-          return { success: false, error: errorInfo };
-        }
-      }, sceneBuilderFunction.toString()); 
+  /**
+   * レンダリング検証を実行
+   * ThreeTestSuiteに委任（将来的にRenderingValidatorで実装予定）
+   * @returns {Promise<Object>} レンダリング結果
+   */
+  async validateRendering() {
+    return this.threeTestSuite.validateRendering();
+  }
 
-    } catch (error) {
-      return {
-        success: false,
-        error: {
-          message: `Scene execution failed: ${error.message}`,
-          stack: error.stack,
-          code: 'PAGE_EVALUATE_ERROR'
-        }
-      };
-    }
+  /**
+   * ThreeTestSuiteインスタンスを取得
+   * 直接Three.js機能にアクセスしたい場合に使用
+   * @returns {ThreeTestSuite} ThreeTestSuiteインスタンス
+   */
+  getThreeTestSuite() {
+    return this.threeTestSuite;
   }
 }
