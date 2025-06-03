@@ -26,10 +26,12 @@ describe('BrowserManager - 基本機能', () => {
   });
 
   test('オプションでヘッドレスモードを設定できる', async () => {
-    const manager = new BrowserManager({ headless: false });
+    // CI環境では headless: true, それ以外では headless: false を使用
+    const isCI = process.env.CI === 'true' || process.env.GITHUB_ACTIONS === 'true';
+    const manager = new BrowserManager({ headless: isCI ? true : false });
     await manager.initialize();
     
-    expect(manager.options.headless).toBe(false);
+    expect(manager.options.headless).toBe(isCI ? true : false);
     
     await manager.cleanup();
   });
