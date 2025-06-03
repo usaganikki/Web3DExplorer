@@ -43,7 +43,7 @@ jobs:
       run: cd three-test-suite && npm ci
 
     #  今はUnitテストだけを対象とする
-    - name: Run test suite
+    - name: Run test unit
       run: npm run test:unit
 
     - name: Run repomix
