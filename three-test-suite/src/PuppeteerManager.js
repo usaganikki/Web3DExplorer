@@ -171,7 +171,7 @@ export class PuppeteerManager {
             code: 'SCENE_EXECUTION_ERROR'
           };
           window.sceneError = errorInfo;
-          console.error(\"Error in sceneBuilderFunction:\", error);
+          console.error('Error in sceneBuilderFunction:', error);
           return { success: false, error: errorInfo };
         }
       }, sceneBuilderFunction.toString()); 
@@ -187,4 +187,4 @@ export class PuppeteerManager {
       };
     }
   }
-}"
+}
