@@ -115,4 +115,83 @@ export class PuppeteerManager {
   generateTestHTML(userScript, options = {}) {
     return this.htmlGenerator.generateTestHTML(userScript, options);
   }
+
+  /**
+   * Three.jsシーンをロードし、指定されたセットアップ関数を実行する
+   * @param {Function} sceneBuilderFunction - Three.jsのシーンをセットアップする関数
+   * @param {Object} options - ロードオプション (title, threeJsVersion, timeoutなど)
+   * @returns {Promise<void>}
+   */
+  async loadThreeScene(sceneBuilderFunction, options = {}) {
+    if (!this.isInitialized()) {
+      throw new Error('PuppeteerManager is not initialized');
+    }
+    if (typeof sceneBuilderFunction !== 'function') {
+      throw new Error('sceneBuilderFunction must be a function');
+    }
+
+    // HTMLGenerator には、Three.jsライブラリをロードするだけの基本HTMLを生成させる
+    // autoExecute: false を指定して、ユーザー提供スクリプトの自動実行を抑制
+    const htmlContent = this.htmlGenerator.generateTestHTML(
+      () => { /* このプレースホルダー関数は autoExecute:false のため実行されない */ }, 
+      { ...options, autoExecute: false } 
+    );
+
+    await this.page.setContent(htmlContent, {
+      waitUntil: 'networkidle0', 
+      timeout: options.timeout || 30000,
+    });
+
+    // Three.jsの主要オブジェクトが利用可能になるまで待機
+    try {
+      await this.page.waitForFunction(() => typeof THREE !== 'undefined' && typeof THREE.WebGLRenderer === 'function', { timeout: options.timeout || 10000 });
+    } catch (e) {
+      throw new Error(`Three.js did not load correctly: ${e.message}`);
+    }
+
+    // Three.jsがロードされた後、page.evaluateを使ってシーン構築関数を実行
+    try {
+      const executionResult = await this.page.evaluate((builderFuncString) => {
+        // このコードはブラウザのコンテキストで実行される
+        if (typeof THREE === 'undefined' || typeof THREE.WebGLRenderer !== 'function') {
+          console.error('THREE or THREE.WebGLRenderer not available in evaluate context');
+          window.sceneError = { message: 'THREE or THREE.WebGLRenderer not available' };
+          return { success: false, error: window.sceneError };
+        }
+        try {
+          const userFunction = new Function(`return (${builderFuncString})`)();
+          userFunction(); 
+          window.sceneReady = true; 
+          return { success: true }; 
+        } catch (e) {
+          window.sceneError = { message: e.message, stack: e.stack };
+          console.error("Error in evaluated sceneBuilderFunction:", e.message, e.stack);
+          return { success: false, error: window.sceneError };
+        }
+      }, sceneBuilderFunction.toString()); 
+
+      if (executionResult && !executionResult.success && executionResult.error) {
+        const error = new Error(executionResult.error.message);
+        error.stack = executionResult.error.stack;
+        throw error;
+      }
+      // もし page.evaluate 自体が失敗した場合 (executionResult が null や undefined の場合など)
+      // または予期せぬ形で失敗した場合
+      if (!executionResult || typeof executionResult.success === 'undefined') {
+         // sceneErrorを再度確認
+        const sceneErrorCheck = await this.page.evaluate(() => window.sceneError);
+        if (sceneErrorCheck) {
+            const error = new Error(sceneErrorCheck.message);
+            error.stack = sceneErrorCheck.stack;
+            throw error;
+        }
+        // それでも不明な場合は汎用エラー
+        throw new Error('Scene execution failed for an unknown reason.');
+      }
+
+    } catch (e) {
+      // page.evaluate 自体のエラー、または上記でスローされたエラー
+      throw e; // そのままスローしてテスト側でキャッチさせる
+    }
+  }
 }

@@ -58,8 +58,6 @@ describe('PuppeteerManager - ファサードクラスとしてのテスト', () 
 
 
 // Issue #4: Three.jsシーン注入機能のテストケース
-// この機能は現在の PuppeteerManager.js に実装されていないためコメントアウトします。
-/*
 describe('PuppeteerManager - Three.jsシーン注入', () => {
   test('シーンセットアップ関数が実行される', async () => {
     const manager = new PuppeteerManager();
@@ -127,22 +125,56 @@ describe('PuppeteerManager - Three.jsシーン注入', () => {
     await manager.initialize();
     
     await manager.loadThreeScene(() => {
+      // Debugging information
+      console.log('THREE object in sceneBuilder:', typeof THREE);
+      if (typeof THREE !== 'undefined') {
+        console.log('THREE.WebGLRenderer in sceneBuilder:', typeof THREE.WebGLRenderer);
+      }
+
       const scene = new THREE.Scene();
       const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
       const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('three-canvas') });
       
+      console.log('renderer is WebGLRenderer (instanceof):', renderer instanceof THREE.WebGLRenderer);
+      console.log('renderer.constructor.name:', renderer.constructor.name);
+      console.log('renderer.isWebGLRenderer property directly:', renderer.isWebGLRenderer);
+
+      console.log('--- Renderer Properties Start ---');
+      for (const prop in renderer) {
+        // Log own properties and inherited properties up to a certain depth or type
+        try {
+          // Avoid logging functions or very large objects directly if it causes issues
+          if (typeof renderer[prop] !== 'function') {
+            console.log(`  ${prop}: ${String(renderer[prop]).substring(0, 100)}`); // Limit string length
+          } else {
+            console.log(`  ${prop}: [Function]`);
+          }
+        } catch (e) {
+          console.log(`  ${prop}: [Error accessing property: ${e.message}]`);
+        }
+      }
+      console.log('--- Renderer Properties End ---');
+      
       window.sceneObjects = {
         sceneType: scene.type,
         cameraType: camera.type,
-        rendererType: renderer.type,
-        sceneName: scene.name || 'Scene'
+        isRendererReallyWebGL: renderer.isWebGLRenderer === true,
+        rendererConstructorName: renderer.constructor.name, // Keep for logging
+        sceneName: scene.name || 'Scene',
+        threeAvailable: typeof THREE !== 'undefined',
+        webglRendererAvailable: typeof THREE !== 'undefined' && typeof THREE.WebGLRenderer !== 'undefined',
+        isRendererInstanceViaInstanceof: renderer instanceof THREE.WebGLRenderer
       };
     });
     
     const sceneObjects = await manager.page.evaluate(() => window.sceneObjects);
+    console.log('Retrieved sceneObjects:', sceneObjects); 
+    expect(sceneObjects.threeAvailable).toBe(true);
+    expect(sceneObjects.webglRendererAvailable).toBe(true);
+    expect(sceneObjects.isRendererInstanceViaInstanceof).toBe(true);
+    expect(sceneObjects.isRendererReallyWebGL).toBe(true); 
     expect(sceneObjects.sceneType).toBe('Scene');
     expect(sceneObjects.cameraType).toBe('PerspectiveCamera');
-    expect(sceneObjects.rendererType).toBe('WebGLRenderer');
     
     await manager.cleanup();
   });
@@ -209,4 +241,3 @@ describe('PuppeteerManager - Three.jsシーン注入', () => {
     await manager.cleanup();
   });
 });
-*/
