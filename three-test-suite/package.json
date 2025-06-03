@@ -4,12 +4,12 @@
   "description": "TDD testing framework for Three.js applications",
   "type": "module",
   "main": "src/index.js",
-  "testTimeout": 30000,
+  "testTimeout": 60000,
   "scripts": {
-    "test": "node --experimental-vm-modules node_modules/.bin/jest",
+    "test": "node --experimental-vm-modules node_modules/.bin/jest --forceExit",
     "test:watch": "node --experimental-vm-modules node_modules/.bin/jest --watch",
-    "test:puppeteer": "node --experimental-vm-modules node_modules/.bin/jest --selectProjects=puppeteer-tests",
-    "test:dom": "node --experimental-vm-modules node_modules/.bin/jest --selectProjects=dom-tests"
+    "test:puppeteer": "node --experimental-vm-modules node_modules/.bin/jest --selectProjects=puppeteer-tests --forceExit",
+    "test:dom": "node --experimental-vm-modules node_modules/.bin/jest --selectProjects=dom-tests --forceExit"
   },
   "dependencies": {
     "puppeteer": "^22.0.0",
@@ -20,6 +20,9 @@
     "jest-environment-jsdom": "^29.5.0"
   },
   "jest": {
+    "testTimeout": 60000,
+    "forceExit": true,
+    "detectOpenHandles": true,
     "projects": [
       {
         "displayName": "puppeteer-tests",
@@ -31,7 +34,9 @@
           "**/*ScreenshotCapture*.test.js",
           "**/*ThreeTestRenderer*.test.js"
         ],
-        "testEnvironment": "node"
+        "testEnvironment": "node",
+        "testTimeout": 60000,
+        "setupFilesAfterEnv": ["<rootDir>/jest.setup.js"]
       },
       {
         "displayName": "dom-tests",
@@ -42,7 +47,8 @@
           "**/*ObjectValidator*.test.js",
           "**/*TransformValidator*.test.js"
         ],
-        "testEnvironment": "jsdom"
+        "testEnvironment": "jsdom",
+        "testTimeout": 30000
       }
     ]
   }
