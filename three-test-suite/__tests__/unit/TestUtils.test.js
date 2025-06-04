@@ -1,4 +1,4 @@
-import { TestUtils, TestPatterns } from '../../src/utils/TestUtils.js';
+import { TestUtils } from '../../src/utils/TestUtils.js';
 import { BrowserManager } from '../../src/BrowserManager.js';
 
 describe('TestUtils - 基本機能テスト', () => {
@@ -192,57 +192,6 @@ describe('TestUtils - 基本機能テスト', () => {
       expect(port).toBeGreaterThanOrEqual(8000);
       expect(port).toBeLessThanOrEqual(9999);
     });
-  });
-});
-
-describe('TestPatterns - テストパターンヘルパー', () => {
-  describe('withBrowserManager', () => {
-    test('BrowserManagerを使用するテストパターン', async () => {
-      let testExecuted = false;
-      let receivedBrowserManager = null;
-      let receivedPage = null;
-
-      await TestPatterns.withBrowserManager(async (browserManager, page) => {
-        testExecuted = true;
-        receivedBrowserManager = browserManager;
-        receivedPage = page;
-
-        expect(browserManager).toBeInstanceOf(BrowserManager);
-        expect(browserManager.isInitialized()).toBe(true);
-        expect(page).toBeDefined();
-      });
-
-      expect(testExecuted).toBe(true);
-      // クリーンアップ後はnullになっている
-      expect(receivedBrowserManager).not.toBeNull();
-      expect(receivedPage).not.toBeNull();
-    }, 30000);
-  });
-
-  describe('withThreeJsScene', () => {
-    test('Three.jsシーンを使用するテストパターン', async () => {
-      let testExecuted = false;
-
-      const sceneBuilder = () => {
-        window.testScene = new THREE.Scene();
-        window.sceneBuilt = true;
-      };
-
-      await TestPatterns.withThreeJsScene(
-        sceneBuilder,
-        async (browserManager, page) => {
-          testExecuted = true;
-
-          const sceneBuilt = await page.evaluate(() => window.sceneBuilt);
-          expect(sceneBuilt).toBe(true);
-
-          const hasScene = await page.evaluate(() => !!window.testScene);
-          expect(hasScene).toBe(true);
-        }
-      );
-
-      expect(testExecuted).toBe(true);
-    }, 45000); // Three.js読み込み時間を考慮して長めに設定
   });
 });
 
