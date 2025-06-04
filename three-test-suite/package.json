@@ -7,6 +7,8 @@
   "scripts": {
     "test": "node --experimental-vm-modules node_modules/.bin/jest --config jest.config.js --forceExit",
     "test:watch": "node --experimental-vm-modules node_modules/.bin/jest --config jest.config.js --watch",
+    "test:utils": "node --experimental-vm-modules node_modules/.bin/jest --config jest.config.js --selectProjects=test-utils --forceExit",
+    "test:utils:watch": "node --experimental-vm-modules node_modules/.bin/jest --config jest.config.js --selectProjects=test-utils --watch",
     "test:puppeteer": "node --experimental-vm-modules node_modules/.bin/jest --config jest.config.js --selectProjects=puppeteer-tests --forceExit",
     "test:dom": "node --experimental-vm-modules node_modules/.bin/jest --config jest.config.js --selectProjects=dom-tests --forceExit",
     "test:unit": "node --experimental-vm-modules node_modules/.bin/jest --config jest.config.js __tests__/unit --forceExit",
