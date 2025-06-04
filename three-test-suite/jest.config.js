@@ -55,9 +55,9 @@ export default {
       testEnvironment: "node",
       transformIgnorePatterns: suiteTransformIgnorePatterns,
       // 統合テストは現在リファクタリング中につき除外
-      testPathIgnorePatterns: [
-        "**/__tests__/integration/.*\\.test\\.js$"
-      ],
+      // testPathIgnorePatterns: [  // ← この行をコメントアウト
+      //   "**/__tests__/integration/.*\\.test\\.js$" // ← この行もコメントアウト
+      // ],
     }
   ],
   collectCoverageFrom: [
