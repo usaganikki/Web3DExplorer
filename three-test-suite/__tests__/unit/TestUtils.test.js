@@ -1,12 +1,18 @@
 import { TestUtils } from '../../src/utils/TestUtils.js';
 import MockBrowserManager from '../../src/mocks/MockBrowserManager.js';
-import { TestIsolationHelper } from '../../src/utils/TestIsolationHelper.js';
+import { createTestIsolation } from '../../src/utils/TestIsolationHelper.js';
 
 describe('TestUtils - 基本機能テスト', () => {
+  let testHelper;
+
   // 各テスト後のクリーンアップを確実に実行
   afterEach(async () => {
     await MockBrowserManager.cleanupAll();
-    TestIsolationHelper.resetTestEnvironment();
+    
+    if (testHelper) {
+      await testHelper.cleanup();
+      testHelper = null;
+    }
   });
 
   describe('createIsolatedBrowserInstance', () => {
@@ -82,7 +88,8 @@ describe('TestUtils - 基本機能テスト', () => {
         cubeRendered: window.cubeRendered
       }));
 
-      expect(beforeReset.testProperty).toBe(true); // MockBrowserManagerは基本的にtrueを返す
+      // MockBrowserManagerでは基本的にtrueを返す
+      expect(beforeReset.testProperty).toBe(true);
       expect(beforeReset.sceneReady).toBe(true);
       expect(beforeReset.cubeRendered).toBe(true);
 
@@ -96,7 +103,8 @@ describe('TestUtils - 基本機能テスト', () => {
         cubeRendered: window.cubeRendered
       }));
 
-      expect(afterReset.testProperty).toBe(true); // MockBrowserManagerではリセット後も基本的にtrueを返す
+      // MockBrowserManagerではリセット後も基本的にtrueを返す
+      expect(afterReset.testProperty).toBe(true);
       expect(afterReset.sceneReady).toBe(true);
       expect(afterReset.cubeRendered).toBe(true);
     });
@@ -108,8 +116,8 @@ describe('TestUtils - 基本機能テスト', () => {
 
     test('MockBrowserManagerのグローバル状態が適切にリセットされる', async () => {
       // MockBrowserManagerのグローバルプロパティを設定
-      browserManager.setGlobalProperty('testProp', 'testValue');
-      expect(browserManager.getGlobalProperty('testProp')).toBe('testValue');
+      TestUtils.setMockGlobalProperty(browserManager, 'testProp', 'testValue');
+      expect(TestUtils.getMockGlobalProperty(browserManager, 'testProp')).toBe('testValue');
 
       // TestUtilsのresetGlobalStateを使用
       await TestUtils.resetGlobalState(browserManager.page);
@@ -119,7 +127,7 @@ describe('TestUtils - 基本機能テスト', () => {
       await browserManager.initialize();
 
       // リセット後は初期状態に戻る
-      expect(browserManager.getGlobalProperty('testProp')).toBeUndefined();
+      expect(TestUtils.getMockGlobalProperty(browserManager, 'testProp')).toBeUndefined();
     });
   });
 
@@ -289,6 +297,11 @@ describe('TestUtils - 基本機能テスト', () => {
   });
 
   describe('TestIsolationHelper連携', () => {
+    beforeEach(async () => {
+      testHelper = createTestIsolation('TestUtils-Integration');
+      await testHelper.setup();
+    });
+
     test('テスト環境の分離機能', async () => {
       const testEnv1 = await TestUtils.setupTest();
       const testEnv2 = await TestUtils.setupTest();
@@ -296,34 +309,107 @@ describe('TestUtils - 基本機能テスト', () => {
       // 異なるインスタンスが作成されることを確認
       expect(testEnv1.browserManager).not.toBe(testEnv2.browserManager);
       
-      // TestIsolationHelperによる分離の確認
-      TestIsolationHelper.isolateTestEnvironment();
+      // TestIsolationHelperのブラウザマネージャーとの独立性確認
+      expect(testHelper.browserManager).not.toBe(testEnv1.browserManager);
+      expect(testHelper.browserManager).not.toBe(testEnv2.browserManager);
       
       await TestUtils.cleanupTest(testEnv1);
       await TestUtils.cleanupTest(testEnv2);
       
-      expect(MockBrowserManager.getActiveInstanceCount()).toBe(0);
+      expect(MockBrowserManager.getActiveInstanceCount()).toBe(1); // testHelperのみ残る
     });
 
     test('グローバル状態のリセット機能', async () => {
       const browserManager = await TestUtils.createIsolatedBrowserInstance();
       
       // グローバル状態を設定
-      browserManager.setGlobalProperty('isolationTest', 'value');
-      expect(browserManager.getGlobalProperty('isolationTest')).toBe('value');
+      TestUtils.setMockGlobalProperty(browserManager, 'isolationTest', 'value');
+      expect(TestUtils.getMockGlobalProperty(browserManager, 'isolationTest')).toBe('value');
       
       // TestIsolationHelperによるリセット
-      TestIsolationHelper.resetTestEnvironment();
+      await testHelper.cleanup();
+      await testHelper.setup();
       
       await browserManager.cleanup();
+      
+      expect(MockBrowserManager.getActiveInstanceCount()).toBe(1); // testHelperのみ
+    });
+
+    test('TestIsolationHelperの独立したデータ生成', async () => {
+      const sceneData = testHelper.generateTestData('scene', 'simple');
+      const meshData = testHelper.generateTestData('mesh');
+      const materialData = testHelper.generateTestData('material');
+      
+      expect(sceneData).toBeDefined();
+      expect(meshData).toBeDefined();
+      expect(materialData).toBeDefined();
+      
+      // データの構造確認
+      expect(sceneData.id).toBeDefined();
+      expect(meshData.id).toBeDefined();
+      expect(materialData.id).toBeDefined();
+    });
+
+    test('TestIsolationHelperでのThree.js HTML生成', async () => {
+      const sceneSetup = () => {
+        const scene = new THREE.Scene();
+        const geometry = new THREE.BoxGeometry();
+        const material = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
+        const cube = new THREE.Mesh(geometry, material);
+        scene.add(cube);
+        window.testScene = scene;
+      };
+
+      const html = testHelper.generateThreeJSTestHTML(sceneSetup);
+      
+      expect(html).toContain('<!DOCTYPE html>');
+      expect(html).toContain('three.min.js');
+      expect(html).toContain('testIsolation');
+      expect(html).toContain(testHelper.testName);
+    });
+  });
+
+  describe('MockBrowserManager特有のヘルパーメソッド', () => {
+    test('setMockGlobalProperty と getMockGlobalProperty', async () => {
+      const browserManager = await TestUtils.createIsolatedBrowserInstance();
+      
+      // プロパティの設定と取得
+      TestUtils.setMockGlobalProperty(browserManager, 'testKey', 'testValue');
+      const value = TestUtils.getMockGlobalProperty(browserManager, 'testKey');
+      
+      expect(value).toBe('testValue');
+      
+      // 存在しないプロパティの取得
+      const nonExistent = TestUtils.getMockGlobalProperty(browserManager, 'nonExistent');
+      expect(nonExistent).toBeUndefined();
+      
+      await browserManager.cleanup();
+    });
+
+    test('cleanupAllMockInstances', async () => {
+      await TestUtils.createIsolatedBrowserInstance();
+      await TestUtils.createIsolatedBrowserInstance();
+      await TestUtils.createIsolatedBrowserInstance();
+      
+      expect(MockBrowserManager.getActiveInstanceCount()).toBe(3);
+      
+      await TestUtils.cleanupAllMockInstances();
+      
+      expect(MockBrowserManager.getActiveInstanceCount()).toBe(0);
     });
   });
 });
 
 describe('TestUtils統合テスト', () => {
+  let testHelper;
+
   afterEach(async () => {
     await MockBrowserManager.cleanupAll();
-    TestIsolationHelper.resetTestEnvironment();
+    
+    if (testHelper) {
+      await testHelper.cleanup();
+      testHelper = null;
+    }
   });
 
   test('複数のテストが独立して実行される', async () => {
@@ -408,5 +494,35 @@ describe('TestUtils統合テスト', () => {
     
     // エラーが発生してもクリーンアップは正常に実行される
     expect(MockBrowserManager.getActiveInstanceCount()).toBe(0);
+  });
+
+  test('TestIsolationHelperとTestUtilsの統合動作', async () => {
+    testHelper = createTestIsolation('Integration-Test');
+    await testHelper.setup();
+    
+    // TestUtilsとTestIsolationHelperの同時使用
+    const testEnv = await TestUtils.setupTest();
+    
+    // 両方のブラウザマネージャーが独立していることを確認
+    expect(testHelper.browserManager).not.toBe(testEnv.browserManager);
+    expect(MockBrowserManager.getActiveInstanceCount()).toBe(2);
+    
+    // TestIsolationHelperでのデータ生成
+    const testData = testHelper.generateTestData('scene');
+    expect(testData.id).toBeDefined();
+    
+    // TestUtilsでのグローバルプロパティ操作
+    TestUtils.setMockGlobalProperty(testEnv.browserManager, 'integrationTest', true);
+    expect(TestUtils.getMockGlobalProperty(testEnv.browserManager, 'integrationTest')).toBe(true);
+    
+    // TestIsolationHelperでのスクリプト実行
+    const result = await testHelper.executeScript(() => {
+      window.testExecuted = true;
+      return window.testExecuted;
+    });
+    expect(result).toBe(true);
+    
+    await TestUtils.cleanupTest(testEnv);
+    expect(MockBrowserManager.getActiveInstanceCount()).toBe(1); // testHelperのみ残る
   });
 });
