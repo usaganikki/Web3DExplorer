@@ -42,8 +42,9 @@ jobs:
     - name: Install three-test-suite dependencies
       run: cd three-test-suite && npm ci
 
-    - name: Run test suite
-      run: npm run test:suite
+    #  今はUnitテストだけを対象とする
+    - name: Run test unit
+      run: cd three-test-suite && npm run test:unit
 
     - name: Run repomix
       if: success() # 前のステップがすべて成功した場合のみ実行

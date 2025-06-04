@@ -20,13 +20,14 @@ export class HTMLGenerator {
 
     const config = {
       title: 'Three.js Test Environment',
-      threeJsVersion: 'r128',
+      threeJsVersion: '0.173.0', // 0.xxx.xxx 形式に修正
       autoExecute: true,
       ...options
     };
 
     const userScriptString = userScript.toString();
-    const threeJsUrl = this._getThreeJsUrl(config.threeJsVersion);
+    const versionToUse = options.threeJsVersion || config.threeJsVersion;
+    const threeJsUrl = this._getThreeJsUrl(versionToUse);
 
     const scriptExecution = config.autoExecute
       ? `
@@ -87,19 +88,18 @@ export class HTMLGenerator {
     
     <script>
         window.threeJsLoadError = false;
-        
-        (function() {
-            var script = document.createElement('script');
-            script.src = '${threeJsUrl}';
-            script.onload = function() {
+        window.threeJsLoaded = false; // 初期状態を false に設定
+
+        (async function() {
+            try {
+                const THREE_MODULE = await import('${threeJsUrl}');
+                window.THREE = THREE_MODULE;
                 console.log('Three.js loaded successfully');
                 window.threeJsLoaded = true;
-            };
-            script.onerror = function() {
-                console.error('Failed to load Three.js from:', script.src);
+            } catch (e) {
+                console.error('Failed to load Three.js from:', '${threeJsUrl}', e);
                 window.threeJsLoadError = true;
-            };
-            document.head.appendChild(script);
+            }
         })();
     </script>
     
@@ -116,43 +116,18 @@ export class HTMLGenerator {
    * @private
    */
   _getThreeJsUrl(version) {
-    const normalizedVersion = version.toLowerCase().replace(/^r/, '');
-    
-    const versionMap = {
-      '128': '0.128.0',
-      '140': '0.140.2',
-      '141': '0.141.0',
-      '142': '0.142.0',
-      '143': '0.143.0',
-      '144': '0.144.0',
-      '145': '0.145.0',
-      '146': '0.146.0',
-      '147': '0.147.0',
-      '148': '0.148.0',
-      '149': '0.149.0',
-      '150': '0.150.1',
-      '151': '0.151.3',
-      '152': '0.152.2',
-      '153': '0.153.0',
-      '154': '0.154.0',
-      '155': '0.155.0',
-      '156': '0.156.1',
-      '157': '0.157.0',
-      '158': '0.158.0',
-      '159': '0.159.0',
-      '160': '0.160.1',
-      '161': '0.161.0',
-      '162': '0.162.0',
-      '163': '0.163.0'
-    };
+    const defaultVersion = '0.173.0'; // ユーザー指示の基本バージョン
+    const cdnjsBaseUrl = 'https://cdnjs.cloudflare.com/ajax/libs/three.js/';
 
-    const mappedVersion = versionMap[normalizedVersion];
-    
-    if (mappedVersion) {
-      return `https://unpkg.com/three@${mappedVersion}/build/three.min.js`;
-    } else {
-      console.warn(`Unknown Three.js version: ${version}, falling back to r128`);
-      return `https://unpkg.com/three@0.128.0/build/three.min.js`;
+    let targetVersion = version || defaultVersion;
+    let fileName = 'three.module.min.js'; // 常に three.module.min.js を使用
+
+    // バージョン形式のバリデーション: '0.xxx.xxx' 形式であること
+    const versionRegex = /^\d+\.\d+\.\d+$/;
+    if (!versionRegex.test(targetVersion)) {
+      throw new Error(`Invalid Three.js version format: "${targetVersion}". Expected format "0.xxx.xxx".`);
     }
+
+    return `${cdnjsBaseUrl}${targetVersion}/${fileName}`;
   }
 }

@@ -1,5 +1,5 @@
-import { BrowserManager } from '../src/BrowserManager.js';
-import { EnvironmentInspector } from '../src/EnvironmentInspector.js';
+import { BrowserManager } from '../../src/BrowserManager.js';
+import { EnvironmentInspector } from '../../src/EnvironmentInspector.js';
 
 describe('EnvironmentInspector - WebGL機能', () => {
   let browserManager;
