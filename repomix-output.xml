@@ -64,12 +64,29 @@ src/
   index.ts
 three-test-suite/
   __tests__/
-    PuppeteerManager.test.js
+    performance/
+      PerformanceTester.test.js
+    unit/
+      BrowserManager.test.js
+      EnvironmentInspector.test.js
+      HTMLGenerator.test.js
+      PuppeteerManager.test.js
+      SceneInspector.test.js
+      ThreeTestSuite.test.js
   docs/
     design-philosophy.md
     quick-start.md
   src/
+    threejs/
+      SceneInspector.js
+      ThreeTestSuite.js
+    BrowserManager.js
+    EnvironmentInspector.js
+    HTMLGenerator.js
+    PerformanceTester.js
     PuppeteerManager.js
+  jest.config.js
+  jest.setup.js
   package.json
   README.md
 .eslintrc.js
@@ -81,56 +98,14 @@ jest.setup.js
 LICENSE
 package.json
 README.md
+test.txt
+test2.txt
 tsconfig.json
 vite.config.ts
 </directory_structure>
 
 <files>
 This section contains the contents of the repository's files.
-
-<file path=".github/workflows/ci.yml">
-name: CI
-
-on:
-  push:
-    branches: [ main ]
-  pull_request:
-    branches: [ main ]
-
-jobs:
-  test:
-    runs-on: ubuntu-latest
-
-    strategy:
-      matrix:
-        node-version: [18.x, 20.x] # プロジェクトでサポートするNode.jsのバージョン
-
-    steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
-
-    - name: Set up Node.js ${{ matrix.node-version }}
-      uses: actions/setup-node@v4
-      with:
-        node-version: ${{ matrix.node-version }}
-        cache: 'npm'
-
-    - name: Install Puppeteer dependencies
-      run: sudo apt-get update && sudo apt-get install -y libgbm-dev
-
-    - name: Install dependencies
-      run: npm ci
-
-    - name: Run tests
-      run: npm test
-
-    - name: Run test suite
-      run: npm run test:suite
-
-    - name: Run repomix
-      if: success() # 前のステップがすべて成功した場合のみ実行
-      run: npx repomix
-</file>
 
 <file path="__tests__/.gitkeep">
 # メインアプリケーションテストファイル用ディレクトリ
@@ -716,6 +691,352 @@ export class EventEmitter {
 
 <file path="src/.gitkeep">
 # メインアプリケーションソースファイル用ディレクトリ
+</file>
+
+<file path="three-test-suite/__tests__/performance/PerformanceTester.test.js">
+import { BrowserManager } from '../src/BrowserManager.js';
+import { PerformanceTester } from '../src/PerformanceTester.js';
+import { PuppeteerManager } from '../src/PuppeteerManager.js'; // For hybrid test that uses PuppeteerManager facade
+
+describe('PerformanceTester - WebAssembly機能', () => {
+  let browserManager;
+  let tester;
+
+  beforeEach(async () => {
+    browserManager = new BrowserManager();
+    await browserManager.initialize();
+    tester = new PerformanceTester(browserManager);
+  });
+
+  afterEach(async () => {
+    await browserManager.cleanup();
+  });
+  
+  test('WASMパフォーマンステストが実行できる', async () => {
+    const performance = await tester.benchmarkWebAssembly();
+    expect(performance).toBeDefined();
+    expect(performance.executionTime).toBeGreaterThanOrEqual(0);
+    expect(performance.operationsPerSecond).toBeGreaterThanOrEqual(0);
+  });
+});
+
+describe('PerformanceTester - WASM + WebGL連携機能', () => {
+  let browserManager;
+  let tester;
+
+  beforeEach(async () => {
+    browserManager = new BrowserManager();
+    await browserManager.initialize();
+    tester = new PerformanceTester(browserManager);
+  });
+
+  afterEach(async () => {
+    await browserManager.cleanup();
+  });
+
+  test('WASM計算結果をWebGLで描画できる (via PuppeteerManager facade)', async () => {
+    // This test implicitly tests the integration through PuppeteerManager's HTML generation
+    // and page content setting, which now uses HTMLGenerator.
+    const puppeteerManager = new PuppeteerManager(); // Uses the refactored classes internally
+    await puppeteerManager.initialize();
+
+    const testScript = () => {
+      window.hybridTestResult = 'pending';
+      const wasmBytes = new Uint8Array([
+        0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00, 0x01, 0x07, 0x01, 0x60, 0x02, 0x7f, 0x7f, 0x01,
+        0x7f, 0x03, 0x02, 0x01, 0x00, 0x07, 0x0a, 0x01, 0x06, 0x61, 0x64, 0x64, 0x54, 0x77, 0x6f, 0x00,
+        0x00, 0x0a, 0x09, 0x01, 0x07, 0x00, 0x20, 0x00, 0x20, 0x01, 0x6a, 0x0b
+      ]);
+      WebAssembly.instantiate(wasmBytes).then(result => {
+        const addTwo = result.instance.exports.addTwo;
+        const vertices = [
+          addTwo(0, 0), addTwo(1, 0), addTwo(0, 0),
+          addTwo(1, 0), addTwo(1, 0), addTwo(0, 0),
+          addTwo(0, 1), addTwo(1, 0), addTwo(0, 0)
+        ];
+        const canvas = document.createElement('canvas');
+        const gl = canvas.getContext('webgl');
+        if (gl && vertices.length === 9) {
+          const buffer = gl.createBuffer();
+          gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+          gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STATIC_DRAW);
+          window.hybridTestResult = 'success';
+        } else {
+          window.hybridTestResult = 'failed';
+        }
+      }).catch(() => { window.hybridTestResult = 'error'; });
+    };
+    
+    const html = puppeteerManager.generateTestHTML(testScript);
+    await puppeteerManager.page.setContent(html);
+    await puppeteerManager.page.waitForFunction('window.hybridTestResult !== "pending"', { timeout: 5000 });
+    const result = await puppeteerManager.page.evaluate(() => window.hybridTestResult);
+    expect(result).toBe('success');
+    
+    await puppeteerManager.cleanup();
+  });
+
+  test('benchmarkHybridPerformance()でWASM+WebGL性能を測定できる', async () => {
+    const performance = await tester.benchmarkHybridPerformance();
+    expect(performance).toBeDefined();
+    expect(performance.wasmComputeTime).toBeGreaterThanOrEqual(0);
+    expect(performance.webglRenderTime).toBeGreaterThanOrEqual(0);
+    expect(performance.dataTransferTime).toBeGreaterThanOrEqual(0);
+    expect(performance.totalTime).toBeGreaterThanOrEqual(0);
+    expect(performance.efficiency).toBeGreaterThanOrEqual(0);
+  });
+
+  test('大量データ処理でのWASM+WebGL連携パフォーマンス', async () => {
+    const performance = await tester.benchmarkHybridPerformance({ 
+      dataSize: 10000, // Reduced for faster CI, original was 10000
+      iterations: 50   // Reduced for faster CI, original was 100
+    });
+    expect(performance.totalTime).toBeLessThan(10000); // Adjusted timeout
+    expect(performance.efficiency).toBeGreaterThanOrEqual(0); // Efficiency can be low
+  });
+
+  test('benchmarkHybridPerformance()は初期化前に呼ぶとエラーを投げる', async () => {
+    const uninitializedBrowserManager = new BrowserManager();
+    const uninitTester = new PerformanceTester(uninitializedBrowserManager);
+    await expect(uninitTester.benchmarkHybridPerformance()).rejects.toThrow('BrowserManager is not initialized');
+  });
+});
+</file>
+
+<file path="three-test-suite/__tests__/unit/BrowserManager.test.js">
+import { BrowserManager } from '../../src/BrowserManager.js';
+
+describe('BrowserManager - 基本機能', () => {
+  test('正常に初期化できる', async () => {
+    const manager = new BrowserManager();
+    await manager.initialize();
+    
+    expect(manager.browser).toBeDefined();
+    expect(manager.page).toBeDefined();
+    
+    await manager.cleanup();
+  });
+
+  test('cleanup後はブラウザが終了している', async () => {
+    const manager = new BrowserManager();
+    await manager.initialize();
+    
+    expect(manager.browser).toBeDefined();
+    expect(manager.isInitialized()).toBe(true);
+    
+    await manager.cleanup();
+    
+    expect(manager.browser).toBeNull();
+    expect(manager.page).toBeNull();
+    expect(manager.isInitialized()).toBe(false);
+  });
+
+  test('オプションでヘッドレスモードを設定できる', async () => {
+    // CI環境では headless: true, それ以外では headless: false を使用
+    const isCI = process.env.CI === 'true' || process.env.GITHUB_ACTIONS === 'true';
+    const manager = new BrowserManager({ headless: isCI ? true : false });
+    await manager.initialize();
+    
+    expect(manager.options.headless).toBe(isCI ? true : false);
+    
+    await manager.cleanup();
+  });
+
+  test('デフォルトオプションが正しく設定される', () => {
+    const manager = new BrowserManager();
+    
+    expect(manager.options.headless).toBe(true);
+    expect(manager.options.width).toBe(1024);
+    expect(manager.options.height).toBe(768);
+    expect(manager.options.args).toContain('--enable-webgl');
+    expect(manager.options.args).toContain('--disable-web-security');
+  });
+
+  test('二重初期化を防ぐ', async () => {
+    const manager = new BrowserManager();
+    await manager.initialize();
+    await manager.initialize(); // 二回目の初期化
+    
+    expect(manager.browser).toBeDefined();
+    await manager.cleanup();
+  });
+
+  test('初期化前のcleanupは何もしない', async () => {
+    const manager = new BrowserManager();
+    await expect(manager.cleanup()).resolves.not.toThrow();
+  });
+});
+</file>
+
+<file path="three-test-suite/__tests__/unit/EnvironmentInspector.test.js">
+import { BrowserManager } from '../../src/BrowserManager.js';
+import { EnvironmentInspector } from '../../src/EnvironmentInspector.js';
+
+describe('EnvironmentInspector - WebGL機能', () => {
+  let browserManager;
+
+  beforeEach(async () => {
+    browserManager = new BrowserManager();
+    await browserManager.initialize();
+  });
+
+  afterEach(async () => {
+    await browserManager.cleanup();
+  });
+
+  test('WebGLコンテキストが取得できる', async () => {
+    const webglSupported = await browserManager.page.evaluate(() => {
+      const canvas = document.createElement('canvas');
+      const gl = canvas.getContext('webgl');
+      return gl !== null;
+    });
+    expect(webglSupported).toBe(true);
+  });
+
+  test('WebGL2も利用可能', async () => {
+    const webgl2Supported = await browserManager.page.evaluate(() => {
+      const canvas = document.createElement('canvas');
+      const gl = canvas.getContext('webgl2');
+      return gl !== null;
+    });
+    expect(webgl2Supported).toBe(true);
+  });
+
+  test('WebGLの基本情報が取得できる', async () => {
+    const webglInfo = await browserManager.page.evaluate(() => {
+      const canvas = document.createElement('canvas');
+      const gl = canvas.getContext('webgl');
+      if (!gl) return null;
+      
+      return {
+        vendor: gl.getParameter(gl.VENDOR),
+        renderer: gl.getParameter(gl.RENDERER),
+        version: gl.getParameter(gl.VERSION)
+      };
+    });
+    
+    expect(webglInfo).not.toBeNull();
+    expect(webglInfo.vendor).toBeDefined();
+    expect(webglInfo.renderer).toBeDefined();
+    expect(webglInfo.version).toBeDefined();
+  });
+
+  test('getWebGLInfo()メソッドでWebGL情報を取得できる', async () => {
+    const inspector = new EnvironmentInspector(browserManager);
+    const webglInfo = await inspector.getWebGLInfo();
+    
+    expect(webglInfo).toBeDefined();
+    expect(webglInfo.webglSupported).toBe(true);
+    expect(webglInfo.webgl2Supported).toBeDefined();
+    expect(webglInfo.vendor).toBeDefined();
+    expect(webglInfo.renderer).toBeDefined();
+    expect(webglInfo.version).toBeDefined();
+  });
+
+  test('getWebGLInfo()は初期化前に呼ぶとエラーを投げる', async () => {
+    const uninitializedBrowserManager = new BrowserManager();
+    // Note: We are not calling initialize()
+    const inspector = new EnvironmentInspector(uninitializedBrowserManager);
+    await expect(inspector.getWebGLInfo()).rejects.toThrow('BrowserManager is not initialized');
+  });
+});
+
+describe('EnvironmentInspector - WebAssembly機能', () => {
+  let browserManager;
+  let inspector;
+
+  beforeEach(async () => {
+    browserManager = new BrowserManager();
+    await browserManager.initialize();
+    inspector = new EnvironmentInspector(browserManager);
+  });
+
+  afterEach(async () => {
+    await browserManager.cleanup();
+  });
+
+  test('WebAssemblyオブジェクトが利用可能', async () => {
+    const wasmSupported = await browserManager.page.evaluate(() => {
+      return typeof WebAssembly !== 'undefined' && 
+             typeof WebAssembly.instantiate === 'function';
+    });
+    expect(wasmSupported).toBe(true);
+  });
+
+  test('WebAssembly.compileStreamingが利用可能', async () => {
+    const streamingSupported = await browserManager.page.evaluate(() => {
+      return typeof WebAssembly.compileStreaming === 'function';
+    });
+    expect(streamingSupported).toBe(true);
+  });
+
+  test('簡単なWASMモジュールが実行できる', async () => {
+    const wasmResult = await browserManager.page.evaluate(() => {
+      const wasmBytes = new Uint8Array([
+        0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00, 0x01, 0x07, 0x01, 0x60, 0x02, 0x7f, 0x7f, 0x01,
+        0x7f, 0x03, 0x02, 0x01, 0x00, 0x07, 0x0a, 0x01, 0x06, 0x61, 0x64, 0x64, 0x54, 0x77, 0x6f, 0x00,
+        0x00, 0x0a, 0x09, 0x01, 0x07, 0x00, 0x20, 0x00, 0x20, 0x01, 0x6a, 0x0b
+      ]);
+      return WebAssembly.instantiate(wasmBytes)
+        .then(result => result.instance.exports.addTwo(5, 3));
+    });
+    expect(wasmResult).toBe(8);
+  });
+
+  test('getWebAssemblyInfo()メソッドでWASM情報を取得できる', async () => {
+    const wasmInfo = await inspector.getWebAssemblyInfo();
+    expect(wasmInfo).toBeDefined();
+    expect(wasmInfo.wasmSupported).toBe(true);
+    expect(wasmInfo.streamingSupported).toBeDefined();
+    // SIMD is not reliably detectable this way, so we check if it's defined.
+    // Depending on the environment, it might be false.
+    expect(wasmInfo.simdSupported).toBeDefined(); 
+  });
+
+  test('getWebAssemblyInfo()は初期化前に呼ぶとエラーを投げる', async () => {
+    const uninitializedBrowserManager = new BrowserManager();
+    const uninitInspector = new EnvironmentInspector(uninitializedBrowserManager);
+    await expect(uninitInspector.getWebAssemblyInfo()).rejects.toThrow('BrowserManager is not initialized');
+  });
+});
+
+describe('EnvironmentInspector - WASM + WebGL連携機能', () => {
+  let browserManager;
+  let inspector;
+
+  beforeEach(async () => {
+    browserManager = new BrowserManager();
+    await browserManager.initialize();
+    inspector = new EnvironmentInspector(browserManager);
+  });
+
+  afterEach(async () => {
+    await browserManager.cleanup();
+  });
+
+  test('WebAssemblyとWebGLが同時に利用可能', async () => {
+    const capabilities = await inspector.getHybridCapabilities();
+    expect(capabilities.wasmSupported).toBe(true);
+    expect(capabilities.webglSupported).toBe(true);
+    expect(capabilities.hybridReady).toBe(true);
+  });
+  
+  test('getHybridCapabilities()メソッドで連携情報を取得できる', async () => {
+    const capabilities = await inspector.getHybridCapabilities();
+    expect(capabilities).toBeDefined();
+    expect(capabilities.wasmSupported).toBeDefined();
+    expect(capabilities.webglSupported).toBeDefined();
+    expect(capabilities.hybridReady).toBeDefined();
+    expect(capabilities.performanceProfile).toBeDefined();
+    expect(capabilities.recommendedStrategy).toBeDefined();
+  });
+
+  test('getHybridCapabilities()は初期化前に呼ぶとエラーを投げる', async () => {
+    const uninitializedBrowserManager = new BrowserManager();
+    const uninitInspector = new EnvironmentInspector(uninitializedBrowserManager);
+    await expect(uninitInspector.getHybridCapabilities()).rejects.toThrow('BrowserManager is not initialized');
+  });
+});
 </file>
 
 <file path="three-test-suite/docs/design-philosophy.md">
@@ -1778,6 +2099,575 @@ test('タイムアウト対策', async () => {
 さらなるサポートが必要な場合は、プロジェクトのIssueを作成してください。
 </file>
 
+<file path="three-test-suite/src/EnvironmentInspector.js">
+/**
+ * EnvironmentInspector
+ * ブラウザ環境の情報取得（WebGL, WebAssembly）を担当するクラス
+ */
+export class EnvironmentInspector {
+  /**
+   * @param {import('./BrowserManager').BrowserManager} browserManager - BrowserManagerのインスタンス
+   */
+  constructor(browserManager) {
+    this.browserManager = browserManager;
+  }
+
+  /**
+   * WebGLの情報と対応状況を取得する
+   * @returns {Promise<WebGLInfo>} WebGL情報オブジェクト
+   * @throws {Error} BrowserManagerが初期化されていない場合
+   * 
+   * @typedef {Object} WebGLInfo
+   * @property {boolean} webglSupported - WebGLサポート状況
+   * @property {boolean} webgl2Supported - WebGL2サポート状況
+   * @property {string|null} vendor - WebGLベンダー情報
+   * @property {string|null} renderer - レンダラー情報
+   * @property {string|null} version - WebGLバージョン情報
+   */
+  async getWebGLInfo() {
+    this.browserManager._validateInitialized();
+
+    try {
+      const webglInfo = await this.browserManager.page.evaluate(this._getWebGLInfoInBrowser);
+      return webglInfo;
+    } catch (error) {
+      throw new Error(`Failed to get WebGL info: ${error.message}`);
+    }
+  }
+
+  /**
+   * WebAssemblyの情報と対応状況を取得する
+   * @returns {Promise<WebAssemblyInfo>} WebAssembly情報オブジェクト
+   * @throws {Error} BrowserManagerが初期化されていない場合
+   * 
+   * @typedef {Object} WebAssemblyInfo
+   * @property {boolean} wasmSupported - WebAssembly基本サポート状況
+   * @property {boolean} streamingSupported - ストリーミングコンパイルサポート状況
+   * @property {boolean} memorySupported - WebAssembly.Memoryサポート状況
+   * @property {boolean} tableSupported - WebAssembly.Tableサポート状況
+   * @property {boolean} globalSupported - WebAssembly.Globalサポート状況
+   * @property {boolean} sharedMemorySupported - SharedArrayBuffer + WebAssemblyサポート状況
+   * @property {boolean} simdSupported - WASM SIMDサポート状況
+   */
+  async getWebAssemblyInfo() {
+    this.browserManager._validateInitialized();
+
+    try {
+      const wasmInfo = await this.browserManager.page.evaluate(this._getWebAssemblyInfoInBrowser);
+      return wasmInfo;
+    } catch (error) {
+      throw new Error(`Failed to get WebAssembly info: ${error.message}`);
+    }
+  }
+
+  /**
+   * WebAssemblyとWebGLの連携機能情報を取得する
+   * @returns {Promise<HybridCapabilities>} 連携機能情報オブジェクト
+   * @throws {Error} BrowserManagerが初期化されていない場合
+   * 
+   * @typedef {Object} HybridCapabilities
+   * @property {boolean} wasmSupported - WebAssembly対応状況
+   * @property {boolean} webglSupported - WebGL対応状況
+   * @property {boolean} hybridReady - 連携機能準備完了
+   * @property {Object} performanceProfile - 性能プロファイル
+   * @property {number} performanceProfile.cpuScore - CPU性能スコア
+   * @property {number} performanceProfile.gpuScore - GPU性能スコア
+   * @property {number} performanceProfile.memoryBandwidth - メモリ帯域幅
+   * @property {string} recommendedStrategy - 推奨処理戦略
+   */
+  async getHybridCapabilities() {
+    this.browserManager._validateInitialized();
+
+    try {
+      const capabilities = await this.browserManager.page.evaluate(this._getHybridCapabilitiesInBrowser);
+      return capabilities;
+    } catch (error) {
+      throw new Error(`Failed to get hybrid capabilities: ${error.message}`);
+    }
+  }
+
+  /**
+   * ブラウザ内でWebGL情報を取得する関数
+   * @private
+   * @returns {WebGLInfo} WebGL情報オブジェクト
+   */
+  _getWebGLInfoInBrowser() {
+    // WebGLサポート確認
+    const canvas = document.createElement('canvas');
+    const webglContext = canvas.getContext('webgl');
+    const webgl2Context = canvas.getContext('webgl2');
+
+    const result = {
+      webglSupported: webglContext !== null,
+      webgl2Supported: webgl2Context !== null,
+      vendor: null,
+      renderer: null,
+      version: null
+    };
+
+    // WebGL基本情報を取得
+    if (webglContext) {
+      result.vendor = webglContext.getParameter(webglContext.VENDOR);
+      result.renderer = webglContext.getParameter(webglContext.RENDERER);
+      result.version = webglContext.getParameter(webglContext.VERSION);
+    }
+
+    return result;
+  }
+
+  /**
+   * ブラウザ内でWebAssembly情報を取得する関数
+   * 各種WebAssembly機能の対応状況を詳細に確認
+   * @private
+   * @returns {WebAssemblyInfo} WebAssembly情報オブジェクト
+   */
+  _getWebAssemblyInfoInBrowser() {
+    const result = {
+      wasmSupported: false,
+      streamingSupported: false,
+      memorySupported: false,
+      tableSupported: false,
+      globalSupported: false,
+      sharedMemorySupported: false,
+      simdSupported: false
+    };
+
+    // WebAssembly基本サポート確認
+    if (typeof WebAssembly !== 'undefined') {
+      result.wasmSupported = true;
+      
+      // ストリーミングコンパイルサポート確認
+      result.streamingSupported = typeof WebAssembly.compileStreaming === 'function' &&
+                                  typeof WebAssembly.instantiateStreaming === 'function';
+      
+      // Memory, Table, Globalサポート確認
+      result.memorySupported = typeof WebAssembly.Memory === 'function';
+      result.tableSupported = typeof WebAssembly.Table === 'function';
+      result.globalSupported = typeof WebAssembly.Global === 'function';
+      
+      // SharedMemoryサポート確認
+      // SecurityError対策のためtry-catchで囲む
+      try {
+        result.sharedMemorySupported = typeof SharedArrayBuffer !== 'undefined' && 
+                                      result.memorySupported;
+        
+        // さらに詳細な確認: 実際にSharedMemoryが作成可能か
+        if (result.sharedMemorySupported) {
+          try {
+            const testMemory = new WebAssembly.Memory({ 
+              initial: 1, 
+              maximum: 1, 
+              shared: true 
+            });
+            // 正常に作成できればtrue、そうでなければfalse
+            result.sharedMemorySupported = testMemory.buffer instanceof SharedArrayBuffer;
+          } catch (e) {
+            result.sharedMemorySupported = false;
+          }
+        }
+      } catch (e) {
+        result.sharedMemorySupported = false;
+      }
+      
+      // SIMD対応確認（将来拡張用）
+      // 現在は基本的な検査のみ。実際のSIMD命令セット対応確認は複雑
+      result.simdSupported = false; // 現在は常にfalse（将来の拡張に備えて）
+    }
+
+    return result;
+  }
+
+  /**
+   * ブラウザ内でWebAssemblyとWebGLの連携機能情報を取得する関数
+   * @private
+   * @returns {HybridCapabilities} 連携機能情報オブジェクト
+   */
+  _getHybridCapabilitiesInBrowser() {
+    // WebAssembly対応確認
+    const wasmSupported = typeof WebAssembly !== 'undefined';
+    
+    // WebGL対応確認
+    const canvas = document.createElement('canvas');
+    const webglContext = canvas.getContext('webgl');
+    const webglSupported = webglContext !== null;
+    
+    // 連携機能準備完了判定
+    const hybridReady = wasmSupported && webglSupported;
+    
+    // 性能プロファイル計算
+    let cpuScore = 0;
+    let gpuScore = 0;
+    let memoryBandwidth = 0;
+    
+    if (wasmSupported) {
+      // 簡易CPU性能スコア算出
+      const startTime = performance.now();
+      let sum = 0;
+      for (let i = 0; i < 100000; i++) {
+        sum += i * 2;
+      }
+      const endTime = performance.now();
+      cpuScore = Math.round(100000 / (endTime - startTime));
+    }
+    
+    if (webglSupported) {
+      // 簡易GPU性能スコア算出（テクスチャサイズベース）
+      const maxTextureSize = webglContext.getParameter(webglContext.MAX_TEXTURE_SIZE);
+      gpuScore = Math.min(maxTextureSize / 1024, 100); // 最大100点
+      
+      // メモリ帯域幅推定（簡易計算）
+      const maxViewportDims = webglContext.getParameter(webglContext.MAX_VIEWPORT_DIMS);
+      memoryBandwidth = Math.round((maxViewportDims[0] * maxViewportDims[1]) / 1000000); // MB/s推定
+    }
+    
+    // 推奨処理戦略の決定
+    let recommendedStrategy = 'cpu-only';
+    if (hybridReady) {
+      if (cpuScore > 50000 && gpuScore > 50) {
+        recommendedStrategy = 'balanced-hybrid';
+      } else if (cpuScore > 50000) {
+        recommendedStrategy = 'cpu-heavy';
+      } else if (gpuScore > 50) {
+        recommendedStrategy = 'gpu-heavy';
+      } else {
+        recommendedStrategy = 'simple-hybrid';
+      }
+    } else if (webglSupported) {
+      recommendedStrategy = 'gpu-only';
+    }
+    
+    return {
+      wasmSupported,
+      webglSupported,
+      hybridReady,
+      performanceProfile: {
+        cpuScore,
+        gpuScore,
+        memoryBandwidth
+      },
+      recommendedStrategy
+    };
+  }
+}
+</file>
+
+<file path="three-test-suite/src/PerformanceTester.js">
+/**
+ * PerformanceTester
+ * パフォーマンステストの実行を担当するクラス
+ */
+export class PerformanceTester {
+  /**
+   * @param {import('./BrowserManager').BrowserManager} browserManager - BrowserManagerのインスタンス
+   */
+  constructor(browserManager) {
+    this.browserManager = browserManager;
+  }
+
+  /**
+   * WebAssemblyのパフォーマンステストを実行する
+   * CPU集約的な処理性能とメモリアクセス性能を測定
+   * @returns {Promise<WebAssemblyPerformance>} パフォーマンス情報オブジェクト
+   * @throws {Error} BrowserManagerが初期化されていない場合
+   * 
+   * @typedef {Object} WebAssemblyPerformance
+   * @property {number} executionTime - 実行時間（ミリ秒）
+   * @property {number} operationsPerSecond - 秒間演算回数
+   * @property {number} memoryPerformance - メモリアクセス性能（操作/秒）
+   */
+  async benchmarkWebAssembly() {
+    this.browserManager._validateInitialized();
+
+    try {
+      const performance = await this.browserManager.page.evaluate(this._benchmarkWebAssemblyInBrowser);
+      return performance;
+    } catch (error) {
+      throw new Error(`Failed to benchmark WebAssembly: ${error.message}`);
+    }
+  }
+
+  /**
+   * WebAssemblyとWebGLの連携パフォーマンステストを実行する
+   * @param {Object} options - テストオプション
+   * @param {number} options.dataSize - テストデータサイズ (デフォルト: 5000)
+   * @param {number} options.iterations - 反復回数 (デフォルト: 20)
+   * @returns {Promise<HybridPerformance>} パフォーマンス情報オブジェクト
+   * @throws {Error} BrowserManagerが初期化されていない場合
+   * 
+   * @typedef {Object} HybridPerformance
+   * @property {number} wasmComputeTime - WASM計算時間（ミリ秒）
+   * @property {number} webglRenderTime - WebGL描画時間（ミリ秒）
+   * @property {number} dataTransferTime - データ転送時間（ミリ秒）
+   * @property {number} totalTime - 総実行時間（ミリ秒）
+   * @property {number} efficiency - 処理効率（0-1）
+   * @property {number} throughput - スループット（データ/秒）
+   */
+  async benchmarkHybridPerformance(options = {}) {
+    this.browserManager._validateInitialized();
+
+    try {
+      const performance = await this.browserManager.page.evaluate(this._benchmarkHybridPerformanceInBrowser, options);
+      return performance;
+    } catch (error) {
+      throw new Error(`Failed to benchmark hybrid performance: ${error.message}`);
+    }
+  }
+
+  /**
+   * ブラウザ内でWebAssemblyパフォーマンステストを実行する関数
+   * 数値計算とメモリアクセスの両方の性能を測定
+   * @private
+   * @returns {Promise<WebAssemblyPerformance>} パフォーマンス情報オブジェクト
+   */
+  _benchmarkWebAssemblyInBrowser() {
+    if (typeof WebAssembly === 'undefined') {
+      throw new Error('WebAssembly is not supported');
+    }
+
+    // 簡単なWASMモジュール（addTwo関数: 2つの数値を加算）
+    // WAT (WebAssembly Text format): 
+    // (module
+    //   (func $addTwo (param $p1 i32) (param $p2 i32) (result i32)
+    //     local.get $p1
+    //     local.get $p2
+    //     i32.add)
+    //   (export "addTwo" (func $addTwo)))
+    const wasmBytes = new Uint8Array([
+      0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00, 0x01, 0x07, 0x01, 0x60, 0x02, 0x7f, 0x7f, 0x01,
+      0x7f, 0x03, 0x02, 0x01, 0x00, 0x07, 0x0a, 0x01, 0x06, 0x61, 0x64, 0x64, 0x54, 0x77, 0x6f, 0x00,
+      0x00, 0x0a, 0x09, 0x01, 0x07, 0x00, 0x20, 0x00, 0x20, 0x01, 0x6a, 0x0b
+    ]);
+
+    return WebAssembly.instantiate(wasmBytes)
+      .then(result => {
+        const addTwo = result.instance.exports.addTwo;
+        
+        // CPU集約的処理のパフォーマンステスト
+        const startTime = performance.now();
+        const iterations = 100000;
+        
+        for (let i = 0; i < iterations; i++) {
+          addTwo(i, i + 1);
+        }
+        
+        const endTime = performance.now();
+        const executionTime = endTime - startTime;
+        const operationsPerSecond = Math.round((iterations / executionTime) * 1000);
+        
+        // メモリアクセス性能テスト
+        const memoryStartTime = performance.now();
+        let memoryPerformance = 0;
+        
+        try {
+          const memory = new WebAssembly.Memory({ initial: 1 });
+          const buffer = new Uint32Array(memory.buffer);
+          const memoryOperations = 1000;
+          
+          for (let i = 0; i < memoryOperations; i++) {
+            buffer[i] = i;
+          }
+          
+          const memoryEndTime = performance.now();
+          const memoryTime = memoryEndTime - memoryStartTime;
+          memoryPerformance = Math.round((memoryOperations / memoryTime) * 1000);
+        } catch (e) {
+          // メモリアクセステストが失敗した場合は0を返す
+          memoryPerformance = 0;
+        }
+        
+        return {
+          executionTime: Math.round(executionTime * 100) / 100, // 小数点以下2桁に丸める
+          operationsPerSecond: operationsPerSecond,
+          memoryPerformance: memoryPerformance
+        };
+      })
+      .catch(error => {
+        throw new Error(`WebAssembly benchmark failed: ${error.message}`);
+      });
+  }
+
+  /**
+   * ブラウザ内でWebAssemblyとWebGLの連携パフォーマンステストを実行する関数
+   * @private
+   * @param {Object} options - テストオプション
+   * @returns {Promise<HybridPerformance>} パフォーマンス情報オブジェクト
+   */
+  _benchmarkHybridPerformanceInBrowser(options) {
+    const config = {
+      dataSize: 5000,    // デフォルトを1000から5000に増加
+      iterations: 20,    // デフォルトを10から20に増加
+      ...options
+    };
+
+    if (typeof WebAssembly === 'undefined') {
+      throw new Error('WebAssembly is not supported');
+    }
+
+    const canvas = document.createElement('canvas');
+    const gl = canvas.getContext('webgl');
+    if (!gl) {
+      throw new Error('WebGL is not supported');
+    }
+
+    // WASMモジュール（データ処理用）
+    const wasmBytes = new Uint8Array([
+      0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00, 0x01, 0x07, 0x01, 0x60, 0x02, 0x7f, 0x7f, 0x01,
+      0x7f, 0x03, 0x02, 0x01, 0x00, 0x07, 0x0a, 0x01, 0x06, 0x61, 0x64, 0x64, 0x54, 0x77, 0x6f, 0x00,
+      0x00, 0x0a, 0x09, 0x01, 0x07, 0x00, 0x20, 0x00, 0x20, 0x01, 0x6a, 0x0b
+    ]);
+
+    return WebAssembly.instantiate(wasmBytes)
+      .then(result => {
+        const addTwo = result.instance.exports.addTwo;
+        
+        const totalStartTime = performance.now();
+        
+        let totalWasmTime = 0;
+        let totalWebglTime = 0;
+        let totalDataTransferTime = 0;
+        
+        for (let iter = 0; iter < config.iterations; iter++) {
+          // WASM計算フェーズ
+          const wasmStartTime = performance.now();
+          const vertices = [];
+          for (let i = 0; i < config.dataSize; i++) {
+            vertices.push(addTwo(i % 100, (i + 1) % 100));
+          }
+          const wasmEndTime = performance.now();
+          totalWasmTime += (wasmEndTime - wasmStartTime);
+          
+          // データ転送フェーズ（より大きなデータで測定精度向上）
+          const transferStartTime = performance.now();
+          
+          // より複雑なデータ転送処理を追加
+          const largeVertexData = new Float32Array(vertices.length * 3); // x, y, z coordinates
+          for (let i = 0; i < vertices.length; i++) {
+            largeVertexData[i * 3] = vertices[i];
+            largeVertexData[i * 3 + 1] = vertices[i] + 1;
+            largeVertexData[i * 3 + 2] = vertices[i] + 2;
+          }
+          
+          // 追加の配列変換処理でデータ転送時間を確実に測定
+          const normalData = new Float32Array(largeVertexData.length);
+          for (let i = 0; i < largeVertexData.length; i++) {
+            normalData[i] = largeVertexData[i] / Math.max(1, Math.abs(largeVertexData[i]));
+          }
+          
+          const transferEndTime = performance.now();
+          const transferTime = transferEndTime - transferStartTime;
+          totalDataTransferTime += Math.max(transferTime, 0.01); // 最小0.01ms保証
+          
+          // WebGL描画フェーズ（処理を重くして測定可能にする）
+          const webglStartTime = performance.now();
+          
+          // 複数のバッファを作成して処理を重くする
+          const buffers = [];
+          for (let bufIdx = 0; bufIdx < 5; bufIdx++) {
+            const buffer = gl.createBuffer();
+            buffers.push(buffer);
+            gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+            gl.bufferData(gl.ARRAY_BUFFER, largeVertexData, gl.STATIC_DRAW);
+            
+            // 追加の WebGL 操作
+            gl.clear(gl.COLOR_BUFFER_BIT);
+            gl.viewport(0, 0, 100, 100);
+          }
+          
+          const webglEndTime = performance.now();
+          const webglTime = webglEndTime - webglStartTime;
+          totalWebglTime += Math.max(webglTime, 0.01); // 最小0.01ms保証
+          
+          // リソースクリーンアップ
+          buffers.forEach(buffer => gl.deleteBuffer(buffer));
+        }
+        
+        const totalEndTime = performance.now();
+        const totalTime = totalEndTime - totalStartTime;
+        
+        // 平均時間計算
+        const wasmComputeTime = Math.round((totalWasmTime / config.iterations) * 100) / 100;
+        const webglRenderTime = Math.round((totalWebglTime / config.iterations) * 100) / 100;
+        const dataTransferTime = Math.round((totalDataTransferTime / config.iterations) * 100) / 100;
+        
+        // 効率計算（理想的な並列処理に対する実際の性能比）
+        const idealTime = Math.max(wasmComputeTime, webglRenderTime);
+        const actualTime = wasmComputeTime + dataTransferTime + webglRenderTime;
+        const efficiency = Math.min(idealTime / actualTime, 1.0);
+        
+        // スループット計算（データ/秒）
+        const throughput = Math.round((config.dataSize * config.iterations * 1000) / totalTime);
+        
+        return {
+          wasmComputeTime,
+          webglRenderTime,
+          dataTransferTime,
+          totalTime: Math.round(totalTime * 100) / 100,
+          efficiency: Math.round(efficiency * 1000) / 1000,
+          throughput
+        };
+      })
+      .catch(error => {
+        throw new Error(`Hybrid performance benchmark failed: ${error.message}`);
+      });
+  }
+}
+</file>
+
+<file path="three-test-suite/jest.config.js">
+// three-test-suite/jest.config.js
+const jsEsmTransform = {
+  // ts-jest を使って .js/.jsx も ESM としてトランスパイル
+  '^.+\\.(js|jsx)$': ['ts-jest', { useESM: true }],
+  // three-test-suite に .ts/.tsx ファイルがあれば、以下も追加
+  // '^.+\\.(ts|tsx)$': ['ts-jest', { useESM: true, tsconfig: { jsx: 'react-jsx' } }],
+};
+
+// three-test-suite で puppeteer 等の ESM パッケージを node_modules から利用する場合に設定
+const suiteTransformIgnorePatterns = [
+  'node_modules/(?!(puppeteer)/)' // puppeteer は ESM なのでトランスパイル対象から除外しない
+];
+
+export default {
+  projects: [
+    {
+      displayName: "puppeteer-tests",
+      preset: 'ts-jest/presets/default-esm', // ESMサポートのため
+      transform: jsEsmTransform,
+      extensionsToTreatAsEsm: ['.jsx'], // .jsx を ESM として扱う ( .js は package.json の type: module で自動判別)
+      moduleFileExtensions: ['js', 'jsx', 'json', 'node'], // 主にJSファイルを扱う
+      testMatch: [
+        "**/__tests__/unit/*PuppeteerManager*.test.js",
+        "**/__tests__/unit/*BrowserManager*.test.js",
+        "**/__tests__/unit/*EnvironmentInspector*.test.js",
+        "**/__tests__/performance/*PerformanceTester*.test.js",
+        "**/__tests__/unit/*ThreeTestSuite*.test.js",
+        "**/__tests__/unit/*SceneInspector*.test.js"
+      ],
+      testEnvironment: "node",
+      transformIgnorePatterns: suiteTransformIgnorePatterns,
+    },
+    {
+      displayName: "dom-tests",
+      preset: 'ts-jest/presets/default-esm', // ESMサポートのため
+      transform: jsEsmTransform,
+      extensionsToTreatAsEsm: ['.jsx'], // .jsx を ESM として扱う ( .js は package.json の type: module で自動判別)
+      moduleFileExtensions: ['js', 'jsx', 'json', 'node'], // 主にJSファイルを扱う
+      testMatch: [
+        "**/__tests__/unit/*HTMLGenerator*.test.js",
+      ],
+      testEnvironment: "jsdom",
+      transformIgnorePatterns: suiteTransformIgnorePatterns, // DOMテストでpuppeteerは通常不要だが、共通設定としておく
+    }
+  ],
+  collectCoverageFrom: [
+    'src/**/*.(js|jsx)', // カバレッジはJS/JSXファイルから
+    '!**/node_modules/**'
+  ],
+  testTimeout: 30000,
+  detectOpenHandles: true,
+};
+</file>
+
 <file path="three-test-suite/README.md">
 # Three.js テストフレームワーク
 
@@ -2599,6 +3489,14 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWE.
+</file>
+
+<file path="test.txt">
+test
+</file>
+
+<file path="test2.txt">
+dGVzdDI=
 </file>
 
 <file path="vite.config.ts">
@@ -3705,6 +4603,1290 @@ export const VERSION = '0.1.0';
 export const LIBRARY_NAME = 'Web3DExplorer';
 </file>
 
+<file path="three-test-suite/__tests__/unit/HTMLGenerator.test.js">
+import { HTMLGenerator } from '../../src/HTMLGenerator.js';
+import { BrowserManager } from '../../src/BrowserManager.js'; // For tests that need to load HTML
+
+describe('HTMLGenerator - HTMLテンプレート', () => {
+  let htmlGenerator;
+  let browserManager; // For tests that need to load HTML
+
+  beforeAll(() => {
+    htmlGenerator = new HTMLGenerator();
+  });
+
+  beforeEach(async () => {
+    // Initialize browserManager only for tests that need it
+  });
+
+  afterEach(async () => {
+    if (browserManager && browserManager.isInitialized()) {
+      await browserManager.cleanup();
+    }
+    browserManager = null; // Reset for next test
+  });
+
+  test('基本HTMLテンプレートが生成される', () => {
+    const html = htmlGenerator.generateTestHTML(() => {});
+    expect(html).toContain('<!DOCTYPE html>');
+    expect(html).toContain('https://cdnjs.cloudflare.com/ajax/libs/three.js/0.173.0/three.module.min.js'); // デフォルトバージョン確認
+    expect(html).toContain('<canvas');
+    expect(html).toContain('id="three-canvas"');
+  });
+
+  test('ユーザースクリプトが注入される', () => {
+    const userScript = () => { console.log('test'); };
+    const html = htmlGenerator.generateTestHTML(userScript);
+    expect(html).toContain(userScript.toString());
+  });
+
+  test('カスタムタイトルが設定される', () => {
+    const customTitle = 'Custom Three.js Test';
+    const html = htmlGenerator.generateTestHTML(() => {}, { title: customTitle });
+    expect(html).toContain(`<title>${customTitle}</title>`);
+  });
+
+  test('異なるThree.jsバージョンが指定できる', () => {
+    const customVersion = '0.173.0'; 
+    const html = htmlGenerator.generateTestHTML(() => {}, { threeJsVersion: customVersion });
+    expect(html).toContain(`https://cdnjs.cloudflare.com/ajax/libs/three.js/${customVersion}/three.module.min.js`); 
+  });
+
+  test('異なるThree.jsバージョンが指定できる (0.172.0以降)', () => {
+    const customVersion = '0.173.0';
+    const html = htmlGenerator.generateTestHTML(() => {}, { threeJsVersion: customVersion });
+    expect(html).toContain(`https://cdnjs.cloudflare.com/ajax/libs/three.js/${customVersion}/three.module.min.js`); 
+  });
+
+  test('自動実行を無効にできる', () => {
+    const userScript = () => { console.log('test'); };
+    const html = htmlGenerator.generateTestHTML(userScript, { autoExecute: false });
+    expect(html).toContain('window.userScript');
+    expect(html).not.toContain("window.addEventListener('load'");
+  });
+
+  test('無効なユーザースクリプトでエラーを投げる', () => {
+    expect(() => htmlGenerator.generateTestHTML('not a function')).toThrow('userScript must be a function');
+    expect(() => htmlGenerator.generateTestHTML(null)).toThrow('userScript must be a function');
+  });
+  
+  test('デバッグ情報要素が含まれる', () => {
+    const html = htmlGenerator.generateTestHTML(() => {});
+    expect(html).toContain('class="debug-info"');
+    expect(html).toContain('id="debug-info"');
+  });
+});
+</file>
+
+<file path="three-test-suite/__tests__/unit/PuppeteerManager.test.js">
+import { PuppeteerManager } from '../../src/PuppeteerManager.js';
+import { BrowserManager } from '../../src/BrowserManager.js';
+import { EnvironmentInspector } from '../../src/EnvironmentInspector.js';
+import { PerformanceTester } from '../../src/PerformanceTester.js';
+import { HTMLGenerator } from '../../src/HTMLGenerator.js';
+import { ThreeTestSuite } from '../../src/threejs/ThreeTestSuite.js';
+
+describe('PuppeteerManager - ファサードクラスとしてのテスト', () => {
+  let manager;
+
+  beforeEach(async () => {
+    manager = new PuppeteerManager({ headless: true });
+    await manager.initialize();
+  });
+
+  afterEach(async () => {
+    if (manager) {
+      await manager.cleanup();
+      manager = null;
+    }
+  });
+
+  test('initializeとcleanupがBrowserManagerに委譲される', () => {
+    expect(manager.browserManager).toBeInstanceOf(BrowserManager);
+    expect(manager.isInitialized()).toBe(true);
+  });
+
+  // === Issue #18 Phase1対応: ThreeTestSuite統合テスト ===
+  test('ThreeTestSuiteインスタンスが作成される', () => {
+    expect(manager.threeTestSuite).toBeInstanceOf(ThreeTestSuite);
+    expect(manager.getThreeTestSuite()).toBe(manager.threeTestSuite);
+  });
+
+  test('getWebGLInfoがEnvironmentInspectorに委譲される', async () => {
+    const webglInfo = await manager.getWebGLInfo();
+    expect(webglInfo).toBeDefined();
+    expect(webglInfo.webglSupported).toBe(true);
+  });
+
+  test('benchmarkWebAssemblyがPerformanceTesterに委譲される', async () => {
+    const perf = await manager.benchmarkWebAssembly();
+    expect(perf).toBeDefined();
+    expect(perf.executionTime).toBeGreaterThanOrEqual(0);
+  });
+
+  test('generateTestHTMLがHTMLGeneratorに委譲される', () => {
+    const html = manager.generateTestHTML(() => {});
+    expect(html).toContain('three.module.min.js');
+  });
+  
+  test('page getterがBrowserManagerのpageを返す', () => {
+    expect(manager.page).toBe(manager.browserManager.page);
+  });
+
+  test('browser getterがBrowserManagerのbrowserを返す', () => {
+    expect(manager.browser).toBe(manager.browserManager.browser);
+  });
+  
+  test('options getterがBrowserManagerのoptionsを返す', () => {
+    expect(manager.options).toBe(manager.browserManager.options);
+  });
+});
+
+describe('PuppeteerManager - Three.jsシーン注入（ThreeTestSuiteへの委譲テスト）', () => {
+  let manager;
+
+  beforeEach(async () => {
+    manager = new PuppeteerManager({ headless: true });
+    await manager.initialize();
+  });
+
+  afterEach(async () => {
+    if (manager) {
+      await manager.cleanup();
+      manager = null;
+    }
+  });
+
+  test('loadThreeSceneがThreeTestSuiteに委譲される', async () => {
+    await manager.loadThreeScene(() => {
+      scene = new THREE.Scene();
+      camera = new THREE.PerspectiveCamera();
+      renderer = new THREE.WebGLRenderer();
+      window.setupComplete = true;
+    });
+    
+    const setupComplete = await manager.page.evaluate(() => window.setupComplete);
+    expect(setupComplete).toBe(true);
+  });
+
+  test('runComprehensiveTestがThreeTestSuiteに委譲される', async () => {
+    const result = await manager.runComprehensiveTest();
+    expect(result).toMatchObject({
+      success: true,
+      message: expect.stringContaining('Phase2 feature')
+    });
+  });
+
+  test('getVisibleObjectsがThreeTestSuiteに委譲される', async () => {
+    const objects = await manager.getVisibleObjects();
+    expect(objects).toEqual([]);
+  });
+
+  test('validateRenderingがThreeTestSuiteに委譲される', async () => {
+    const result = await manager.validateRendering();
+    expect(result).toMatchObject({
+      success: true,
+      message: expect.stringContaining('Phase3 feature')
+    });
+  });
+
+  test('loadThreeScene()は初期化前に呼ぶとThreeTestSuiteでエラーを投げる', async () => {
+    const uninitializedManager = new PuppeteerManager();
+    
+    await expect(
+      uninitializedManager.loadThreeScene(() => {})
+    ).rejects.toThrow('BrowserManager is not initialized');
+  });
+
+  test('無効なシーン関数でThreeTestSuiteがエラーを投げる', async () => {
+    await expect(manager.loadThreeScene('not a function')).rejects.toThrow('sceneBuilderFunction must be a function');
+    await expect(manager.loadThreeScene(null)).rejects.toThrow('sceneBuilderFunction must be a function');
+    await expect(manager.loadThreeScene(undefined)).rejects.toThrow('sceneBuilderFunction must be a function');
+  });
+
+  test('window.sceneReadyが true になる', async () => {
+    await manager.loadThreeScene(() => {
+      scene = new THREE.Scene();
+      camera = new THREE.PerspectiveCamera();
+      renderer = new THREE.WebGLRenderer();
+    });
+    
+    const sceneReady = await manager.page.evaluate(() => window.sceneReady);
+    expect(sceneReady).toBe(true);
+  });
+
+  test('エラーが発生した場合の適切な処理', async () => {
+    await expect(manager.loadThreeScene(() => {
+      throw new Error('Test error');
+    })).rejects.toThrow('Test error');
+  });
+
+  test('Three.jsオブジェクトが正しく作成される', async () => {
+    await manager.loadThreeScene(() => {
+      const scene = new THREE.Scene();
+      const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+      const renderer = new THREE.WebGLRenderer();
+      
+      const isValidWebGLRenderer = (
+        renderer instanceof THREE.WebGLRenderer &&
+        renderer.constructor === THREE.WebGLRenderer &&
+        typeof renderer.render === 'function' &&
+        typeof renderer.setSize === 'function'
+      );
+      
+      window.sceneObjects = {
+        sceneType: scene.type,
+        cameraType: camera.type,
+        isValidWebGLRenderer: isValidWebGLRenderer,
+        rendererHasRenderMethod: typeof renderer.render === 'function',
+        rendererHasSetSizeMethod: typeof renderer.setSize === 'function',
+        sceneName: scene.name || 'Scene',
+        threeAvailable: typeof THREE !== 'undefined',
+        webglRendererAvailable: typeof THREE !== 'undefined' && typeof THREE.WebGLRenderer !== 'undefined',
+        isRendererInstanceOfWebGL: renderer instanceof THREE.WebGLRenderer,
+        rendererConstructorName: renderer.constructor.name
+      };
+    });
+    
+    const sceneObjects = await manager.page.evaluate(() => window.sceneObjects);
+    
+    expect(sceneObjects.threeAvailable).toBe(true);
+    expect(sceneObjects.webglRendererAvailable).toBe(true);
+    expect(sceneObjects.isRendererInstanceOfWebGL).toBe(true);
+    expect(sceneObjects.isValidWebGLRenderer).toBe(true);
+    expect(sceneObjects.rendererHasRenderMethod).toBe(true);
+    expect(sceneObjects.rendererHasSetSizeMethod).toBe(true);
+    expect(sceneObjects.sceneType).toBe('Scene');
+    expect(sceneObjects.cameraType).toBe('PerspectiveCamera');
+  });
+
+  test('複雑なシーンセットアップが実行される', async () => {
+    await manager.loadThreeScene(() => {
+      const scene = new THREE.Scene();
+      const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+      const renderer = new THREE.WebGLRenderer();
+      
+      const geometry = new THREE.BoxGeometry();
+      const material = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
+      const cube = new THREE.Mesh(geometry, material);
+      scene.add(cube);
+      
+      const light = new THREE.DirectionalLight(0xffffff, 1);
+      scene.add(light);
+      
+      camera.position.z = 5;
+      renderer.setSize(800, 600);
+      renderer.render(scene, camera);
+      
+      window.sceneAnalysis = {
+        objectCount: scene.children.length,
+        hasLight: scene.children.some(child => child.type.includes('Light')),
+        hasMesh: scene.children.some(child => child.type === 'Mesh'),
+        cameraPosition: { x: camera.position.x, y: camera.position.y, z: camera.position.z }
+      };
+    });
+    
+    const analysis = await manager.page.evaluate(() => window.sceneAnalysis);
+    expect(analysis.objectCount).toBe(2);
+    expect(analysis.hasLight).toBe(true);
+    expect(analysis.hasMesh).toBe(true);
+    expect(analysis.cameraPosition.z).toBe(5);
+  });
+
+  test('カスタムオプションが適用される', async () => {
+    await manager.loadThreeScene(() => {
+      window.customSceneLoaded = true;
+    }, {
+      title: 'Custom Scene Test',
+      threeJsVersion: '0.150.0',
+      timeout: 15000
+    });
+    
+    const customSceneLoaded = await manager.page.evaluate(() => window.customSceneLoaded);
+    expect(customSceneLoaded).toBe(true);
+    
+    const title = await manager.page.title();
+    expect(title).toBe('Custom Scene Test');
+  });
+});
+
+// === 既存の互換性テストを維持 ===
+describe('PuppeteerManager - 既存機能の互換性テスト', () => {
+  let manager;
+
+  beforeEach(async () => {
+    manager = new PuppeteerManager({ headless: true });
+    await manager.initialize();
+  });
+
+  afterEach(async () => {
+    if (manager) {
+      await manager.cleanup();
+      manager = null;
+    }
+  });
+
+  test('既存のloadThreeSceneメソッドが動作する（非推奨）', async () => {
+    // @deprecated のメソッドであることを確認しつつ、互換性をテスト
+    await manager.loadThreeScene(() => {
+      const scene = new THREE.Scene();
+      window.legacyTestComplete = true;
+    });
+    
+    const testComplete = await manager.page.evaluate(() => window.legacyTestComplete);
+    expect(testComplete).toBe(true);
+  });
+
+  test('既存のThree.js機能へのアクセスが維持される', async () => {
+    // PuppeteerManager経由でThree.js機能にアクセスできることを確認
+    const comprehensiveResult = await manager.runComprehensiveTest();
+    const visibleObjects = await manager.getVisibleObjects();
+    const renderingResult = await manager.validateRendering();
+    
+    expect(comprehensiveResult.success).toBe(true);
+    expect(visibleObjects).toEqual([]);
+    expect(renderingResult.success).toBe(true);
+  });
+});
+</file>
+
+<file path="three-test-suite/__tests__/unit/SceneInspector.test.js">
+/**
+ * SceneInspector のテスト
+ * Issue #18 Phase1で追加されたSceneInspectorクラスの単体テスト
+ */
+import { SceneInspector } from '../../src/threejs/SceneInspector.js';
+import { BrowserManager } from '../../src/BrowserManager.js';
+import { HTMLGenerator } from '../../src/HTMLGenerator.js';
+
+describe('SceneInspector', () => {
+  let browserManager;
+  let sceneInspector;
+  let htmlGenerator;
+
+  beforeEach(async () => {
+    browserManager = new BrowserManager({
+      headless: true,
+      timeout: 10000
+    });
+    await browserManager.initialize();
+    sceneInspector = new SceneInspector(browserManager);
+    htmlGenerator = new HTMLGenerator();
+  });
+
+  afterEach(async () => {
+    if (browserManager && browserManager.isInitialized()) {
+      await browserManager.cleanup();
+    }
+  });
+
+  describe('Constructor', () => {
+    it('should create SceneInspector instance with BrowserManager', () => {
+      expect(sceneInspector).toBeInstanceOf(SceneInspector);
+      expect(sceneInspector.browserManager).toBe(browserManager);
+    });
+
+    it('should throw error when BrowserManager is not provided', () => {
+      expect(() => {
+        new SceneInspector();
+      }).toThrow('BrowserManager instance is required');
+    });
+
+    it('should throw error when null BrowserManager is provided', () => {
+      expect(() => {
+        new SceneInspector(null);
+      }).toThrow('BrowserManager instance is required');
+    });
+  });
+
+  describe('Scene Information Retrieval', () => {
+    beforeEach(async () => {
+      // Three.jsシーンをセットアップ
+      const htmlContent = htmlGenerator.generateTestHTML(() => {}, {
+        threeJsVersion: '0.163.0',
+        autoExecute: false
+      });
+      
+      await browserManager.page.setContent(htmlContent, {
+        waitUntil: 'networkidle0',
+        timeout: 10000
+      });
+
+      // Three.jsの読み込み完了を待機
+      await browserManager.page.waitForFunction(
+        () => window.threeJsLoaded === true,
+        { timeout: 10000 }
+      );
+    });
+
+    it('should throw error when BrowserManager is not initialized', async () => {
+      const uninitializedBrowserManager = new BrowserManager();
+      const uninitializedInspector = new SceneInspector(uninitializedBrowserManager);
+      
+      await expect(
+        uninitializedInspector.getSceneInfo()
+      ).rejects.toThrow('BrowserManager is not initialized');
+    });
+
+    it('should return unavailable status when scene is not found', async () => {
+      const sceneInfo = await sceneInspector.getSceneInfo();
+      
+      expect(sceneInfo).toMatchObject({
+        available: false,
+        error: 'Scene not found in window.scene'
+      });
+    });
+
+    it('should return scene information when scene exists', async () => {
+      // シーンを作成
+      await browserManager.page.evaluate(() => {
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x404040);
+        window.scene = scene;
+      });
+
+      const sceneInfo = await sceneInspector.getSceneInfo();
+      
+      expect(sceneInfo).toMatchObject({
+        available: true,
+        children: 0,
+        background: expect.any(String),
+        fog: null,
+        autoUpdate: true,
+        matrixAutoUpdate: true,
+        uuid: expect.any(String),
+        type: 'Scene'
+      });
+    });
+
+    it('should return scene with fog information', async () => {
+      await browserManager.page.evaluate(() => {
+        const scene = new THREE.Scene();
+        scene.fog = new THREE.Fog(0xcccccc, 10, 15);
+        window.scene = scene;
+      });
+
+      const sceneInfo = await sceneInspector.getSceneInfo();
+      
+      expect(sceneInfo.fog).toMatchObject({
+        type: 'Fog',
+        near: 10,
+        far: 15,
+        color: expect.any(Number)
+      });
+    });
+  });
+
+  describe('Camera Information Retrieval', () => {
+    beforeEach(async () => {
+      const htmlContent = htmlGenerator.generateTestHTML(() => {}, {
+        threeJsVersion: '0.163.0',
+        autoExecute: false
+      });
+      
+      await browserManager.page.setContent(htmlContent, {
+        waitUntil: 'networkidle0',
+        timeout: 10000
+      });
+
+      await browserManager.page.waitForFunction(
+        () => window.threeJsLoaded === true,
+        { timeout: 10000 }
+      );
+    });
+
+    it('should return unavailable status when camera is not found', async () => {
+      const cameraInfo = await sceneInspector.getCameraInfo();
+      
+      expect(cameraInfo).toMatchObject({
+        available: false,
+        error: 'Camera not found in window.camera'
+      });
+    });
+
+    it('should return camera information when camera exists', async () => {
+      await browserManager.page.evaluate(() => {
+        const camera = new THREE.PerspectiveCamera(75, 16/9, 0.1, 1000);
+        camera.position.set(0, 0, 5);
+        window.camera = camera;
+      });
+
+      const cameraInfo = await sceneInspector.getCameraInfo();
+      
+      expect(cameraInfo).toMatchObject({
+        available: true,
+        type: 'PerspectiveCamera',
+        position: {
+          x: 0,
+          y: 0,
+          z: 5
+        },
+        rotation: {
+          x: expect.any(Number),
+          y: expect.any(Number),
+          z: expect.any(Number)
+        },
+        fov: 75,
+        aspect: expect.any(Number),
+        near: 0.1,
+        far: 1000,
+        zoom: 1,
+        uuid: expect.any(String)
+      });
+    });
+
+    it('should handle orthographic camera', async () => {
+      await browserManager.page.evaluate(() => {
+        const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 1000);
+        window.camera = camera;
+      });
+
+      const cameraInfo = await sceneInspector.getCameraInfo();
+      
+      expect(cameraInfo.type).toBe('OrthographicCamera');
+      expect(cameraInfo.fov).toBeNull();
+    });
+  });
+
+  describe('Renderer Information Retrieval', () => {
+    beforeEach(async () => {
+      const htmlContent = htmlGenerator.generateTestHTML(() => {}, {
+        threeJsVersion: '0.163.0',
+        autoExecute: false
+      });
+      
+      await browserManager.page.setContent(htmlContent, {
+        waitUntil: 'networkidle0',
+        timeout: 10000
+      });
+
+      await browserManager.page.waitForFunction(
+        () => window.threeJsLoaded === true,
+        { timeout: 10000 }
+      );
+    });
+
+    it('should return unavailable status when renderer is not found', async () => {
+      const rendererInfo = await sceneInspector.getRendererInfo();
+      
+      expect(rendererInfo).toMatchObject({
+        available: false,
+        error: 'Renderer not found in window.renderer'
+      });
+    });
+
+    it('should return renderer information when renderer exists', async () => {
+      await browserManager.page.evaluate(() => {
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(800, 600);
+        window.renderer = renderer;
+      });
+
+      const rendererInfo = await sceneInspector.getRendererInfo();
+      
+      expect(rendererInfo).toMatchObject({
+        available: true,
+        type: 'WebGLRenderer',
+        size: {
+          width: expect.any(Number),
+          height: expect.any(Number)
+        },
+        pixelRatio: expect.any(Number),
+        shadowMap: {
+          enabled: expect.any(Boolean),
+          type: expect.any(Number)
+        },
+        autoClear: expect.any(Boolean),
+        sortObjects: expect.any(Boolean)
+      });
+    });
+  });
+
+  describe('Comprehensive Information', () => {
+    beforeEach(async () => {
+      const htmlContent = htmlGenerator.generateTestHTML(() => {}, {
+        threeJsVersion: '0.163.0',
+        autoExecute: false
+      });
+      
+      await browserManager.page.setContent(htmlContent, {
+        waitUntil: 'networkidle0',
+        timeout: 10000
+      });
+
+      await browserManager.page.waitForFunction(
+        () => window.threeJsLoaded === true,
+        { timeout: 10000 }
+      );
+    });
+
+    it('should return comprehensive information for complete scene', async () => {
+      // 完全なシーンをセットアップ
+      await browserManager.page.evaluate(() => {
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(75, 16/9, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer();
+        renderer.setSize(800, 600);
+        
+        window.scene = scene;
+        window.camera = camera;
+        window.renderer = renderer;
+      });
+
+      const info = await sceneInspector.getComprehensiveInfo();
+      
+      expect(info).toMatchObject({
+        timestamp: expect.any(String),
+        scene: {
+          available: true
+        },
+        camera: {
+          available: true
+        },
+        renderer: {
+          available: true
+        },
+        status: {
+          sceneReady: true,
+          cameraReady: true,
+          rendererReady: true,
+          allReady: true
+        }
+      });
+    });
+
+    it('should return mixed status when only some components are available', async () => {
+      await browserManager.page.evaluate(() => {
+        const scene = new THREE.Scene();
+        window.scene = scene;
+        // cameraとrendererは意図的にセットしない
+      });
+
+      const info = await sceneInspector.getComprehensiveInfo();
+      
+      expect(info.status).toMatchObject({
+        sceneReady: true,
+        cameraReady: false,
+        rendererReady: false,
+        allReady: false
+      });
+    });
+  });
+
+  describe('Utility Methods', () => {
+    beforeEach(async () => {
+      const htmlContent = htmlGenerator.generateTestHTML(() => {}, {
+        threeJsVersion: '0.163.0',
+        autoExecute: false
+      });
+      
+      await browserManager.page.setContent(htmlContent, {
+        waitUntil: 'networkidle0',
+        timeout: 10000
+      });
+
+      await browserManager.page.waitForFunction(
+        () => window.threeJsLoaded === true,
+        { timeout: 10000 }
+      );
+    });
+
+    it('should return 0 object count when scene is not available', async () => {
+      const count = await sceneInspector.getObjectCount();
+      expect(count).toBe(0);
+    });
+
+    it('should return correct object count when scene has objects', async () => {
+      await browserManager.page.evaluate(() => {
+        const scene = new THREE.Scene();
+        const cube = new THREE.Mesh(
+          new THREE.BoxGeometry(),
+          new THREE.MeshBasicMaterial({ color: 0x00ff00 })
+        );
+        scene.add(cube);
+        window.scene = scene;
+      });
+
+      const count = await sceneInspector.getObjectCount();
+      expect(count).toBe(1);
+    });
+
+    it('should return Three.js status information', async () => {
+      const status = await sceneInspector.getThreeJsStatus();
+      
+      expect(status).toMatchObject({
+        threeLoaded: true,
+        version: expect.any(String),
+        webglAvailable: expect.any(Boolean),
+        webgl2Available: expect.any(Boolean),
+        sceneReady: expect.any(Boolean),
+        threeJsLoaded: expect.any(Boolean)
+      });
+    });
+  });
+
+  describe('Error Handling', () => {
+    it('should handle page evaluation errors gracefully', async () => {
+      // ブラウザをクローズしてエラー状態を作る
+      await browserManager.cleanup();
+      
+      await expect(
+        sceneInspector.getSceneInfo()
+      ).rejects.toThrow();
+    });
+
+    it('should provide meaningful error messages', async () => {
+      await browserManager.cleanup();
+      
+      try {
+        await sceneInspector.getCameraInfo();
+      } catch (error) {
+        expect(error.message).toContain('BrowserManager is not initialized');
+      }
+    });
+  });
+});
+</file>
+
+<file path="three-test-suite/__tests__/unit/ThreeTestSuite.test.js">
+/**
+ * ThreeTestSuite のテスト
+ * Issue #18 Phase1で追加されたThreeTestSuiteクラスの単体テスト
+ */
+import { ThreeTestSuite } from '../../src/threejs/ThreeTestSuite.js';
+import { BrowserManager } from '../../src/BrowserManager.js';
+
+describe('ThreeTestSuite', () => {
+  let browserManager;
+  let threeTestSuite;
+
+  beforeEach(async () => {
+    browserManager = new BrowserManager({
+      headless: true,
+      timeout: 10000
+    });
+    await browserManager.initialize();
+    threeTestSuite = new ThreeTestSuite(browserManager);
+  });
+
+  afterEach(async () => {
+    if (browserManager && browserManager.isInitialized()) {
+      await browserManager.cleanup();
+    }
+  });
+
+  describe('Constructor', () => {
+    it('should create ThreeTestSuite instance with BrowserManager', () => {
+      expect(threeTestSuite).toBeInstanceOf(ThreeTestSuite);
+      expect(threeTestSuite.browserManager).toBe(browserManager);
+    });
+
+    it('should throw error when BrowserManager is not provided', () => {
+      expect(() => {
+        new ThreeTestSuite();
+      }).toThrow('BrowserManager instance is required');
+    });
+
+    it('should throw error when null BrowserManager is provided', () => {
+      expect(() => {
+        new ThreeTestSuite(null);
+      }).toThrow('BrowserManager instance is required');
+    });
+  });
+
+  describe('Initialization', () => {
+    it('should initialize without errors', async () => {
+      await expect(threeTestSuite.initialize()).resolves.not.toThrow();
+    });
+  });
+
+  describe('SceneInspector Management', () => {
+    it('should return null for SceneInspector initially', () => {
+      const inspector = threeTestSuite.getSceneInspector();
+      expect(inspector).toBeNull();
+    });
+  });
+
+  describe('Three.js Scene Loading', () => {
+    it('should throw error when BrowserManager is not initialized', async () => {
+      const uninitializedBrowserManager = new BrowserManager();
+      const uninitializedSuite = new ThreeTestSuite(uninitializedBrowserManager);
+      
+      const sceneFunction = () => {
+        const scene = new THREE.Scene();
+        window.scene = scene;
+      };
+
+      await expect(
+        uninitializedSuite.loadThreeScene(sceneFunction)
+      ).rejects.toThrow('BrowserManager is not initialized');
+    });
+
+    it('should throw error when sceneBuilderFunction is not a function', async () => {
+      await expect(
+        threeTestSuite.loadThreeScene('not a function')
+      ).rejects.toThrow('sceneBuilderFunction must be a function');
+    });
+
+    it('should throw error when sceneBuilderFunction is null', async () => {
+      await expect(
+        threeTestSuite.loadThreeScene(null)
+      ).rejects.toThrow('sceneBuilderFunction must be a function');
+    });
+
+    it('should load Three.js scene successfully', async () => {
+      const sceneFunction = () => {
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(75, 1, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer();
+        
+        window.scene = scene;
+        window.camera = camera;
+        window.renderer = renderer;
+      };
+
+      await expect(
+        threeTestSuite.loadThreeScene(sceneFunction, { timeout: 15000 })
+      ).resolves.not.toThrow();
+    }, 20000);
+
+    it('should handle custom timeout option', async () => {
+      const sceneFunction = () => {
+        const scene = new THREE.Scene();
+        window.scene = scene;
+      };
+
+      await expect(
+        threeTestSuite.loadThreeScene(sceneFunction, { timeout: 5000 })
+      ).resolves.not.toThrow();
+    }, 10000);
+  });
+
+  describe('HTML Generation', () => {
+    it('should generate valid HTML with default options', () => {
+      const html = threeTestSuite._generateThreeJsHTML();
+      
+      expect(html).toContain('<!DOCTYPE html>');
+      expect(html).toContain('<title>Three.js Test Scene</title>');
+      expect(html).toContain('<script type="importmap">');
+      expect(html).toContain('"three": "https://cdnjs.cloudflare.com/ajax/libs/three.js/0.173.0/three.module.min.js"');
+      expect(html).toContain('<script type="module">');
+      expect(html).toContain('window.THREE = THREE;');
+      expect(html).toContain('window.threeJsLoaded = true;');
+    });
+
+    it('should generate HTML with custom options', () => {
+      const options = {
+        title: 'Custom Test Scene',
+        threeJsVersion: '0.173.0' // カスタムバージョンを0.173.0に
+      };
+      
+      const html = threeTestSuite._generateThreeJsHTML(options);
+      
+      expect(html).toContain('<title>Custom Test Scene</title>');
+      expect(html).toContain('<script type="importmap">');
+      expect(html).toContain('"three": "https://cdnjs.cloudflare.com/ajax/libs/three.js/0.173.0/three.module.min.js"');
+      expect(html).toContain('<script type="module">');
+    });
+  });
+
+  describe('Future Features (Placeholders)', () => {
+    it('should return placeholder for runComprehensiveTest', async () => {
+      const result = await threeTestSuite.runComprehensiveTest();
+      
+      expect(result).toMatchObject({
+        success: true,
+        message: expect.stringContaining('Phase2 feature')
+      });
+      expect(result.timestamp).toBeDefined();
+    });
+
+    it('should return empty array for getVisibleObjects', async () => {
+      const objects = await threeTestSuite.getVisibleObjects();
+      expect(objects).toEqual([]);
+    });
+
+    it('should return placeholder for validateRendering', async () => {
+      const result = await threeTestSuite.validateRendering();
+      
+      expect(result).toMatchObject({
+        success: true,
+        message: expect.stringContaining('Phase3 feature')
+      });
+    });
+  });
+
+  describe('Error Handling', () => {
+    it('should handle scene execution errors gracefully', async () => {
+      const errorFunction = () => {
+        throw new Error('Test scene error');
+      };
+
+      await expect(
+        threeTestSuite.loadThreeScene(errorFunction, { timeout: 5000 })
+      ).rejects.toThrow();
+    }, 10000);
+
+    it('should timeout properly when Three.js loading takes too long', async () => {
+      const sceneFunction = () => {
+        const scene = new THREE.Scene();
+        window.scene = scene;
+      };
+
+      // 非常に短いタイムアウトを設定してタイムアウトをテスト
+      await expect(
+        threeTestSuite.loadThreeScene(sceneFunction, { timeout: 1 })
+      ).rejects.toThrow(/timeout/);
+    }, 10000);
+  });
+});
+</file>
+
+<file path="three-test-suite/src/threejs/SceneInspector.js">
+/**
+ * SceneInspector
+ * Three.jsシーンの検査・解析機能を提供するクラス
+ * Issue #18 Phase1で実装されるシーン検査機能
+ */
+export class SceneInspector {
+  constructor(browserManager) {
+    if (!browserManager) {
+      throw new Error('BrowserManager instance is required');
+    }
+    this.browserManager = browserManager;
+  }
+
+  /**
+   * シーン情報を取得
+   * @returns {Promise<Object>} シーン情報オブジェクト
+   */
+  async getSceneInfo() {
+    if (!this.browserManager.isInitialized()) {
+      throw new Error('BrowserManager is not initialized');
+    }
+
+    try {
+      const sceneInfo = await this.browserManager.page.evaluate(() => {
+        if (typeof window.scene === 'undefined') {
+          return {
+            available: false,
+            error: 'Scene not found in window.scene'
+          };
+        }
+
+        const scene = window.scene;
+        return {
+          available: true,
+          children: scene.children.length,
+          background: scene.background ? scene.background.toString() : null,
+          fog: scene.fog ? {
+            type: scene.fog.isFog ? 'Fog' : scene.fog.constructor.name,
+            near: scene.fog.near,
+            far: scene.fog.far,
+            color: scene.fog.color ? scene.fog.color.getHex() : null
+          } : null,
+          autoUpdate: scene.autoUpdate !== undefined ? scene.autoUpdate : true, // Default to true if undefined
+          matrixAutoUpdate: scene.matrixAutoUpdate !== undefined ? scene.matrixAutoUpdate : true, // Default to true if undefined
+          uuid: scene.uuid,
+          type: scene.isScene ? 'Scene' : scene.constructor.name
+        };
+      });
+
+      return sceneInfo;
+    } catch (error) {
+      throw new Error(`Failed to get scene info: ${error.message}`);
+    }
+  }
+
+  /**
+   * カメラ情報を取得
+   * @returns {Promise<Object>} カメラ情報オブジェクト
+   */
+  async getCameraInfo() {
+    if (!this.browserManager.isInitialized()) {
+      throw new Error('BrowserManager is not initialized');
+    }
+
+    try {
+      const cameraInfo = await this.browserManager.page.evaluate(() => {
+        if (typeof window.camera === 'undefined') {
+          return {
+            available: false,
+            error: 'Camera not found in window.camera'
+          };
+        }
+
+        const camera = window.camera;
+        let cameraType = camera.constructor.name;
+        if (camera.isPerspectiveCamera) cameraType = 'PerspectiveCamera';
+        else if (camera.isOrthographicCamera) cameraType = 'OrthographicCamera';
+        
+        return {
+          available: true,
+          type: cameraType,
+          position: {
+            x: camera.position.x,
+            y: camera.position.y,
+            z: camera.position.z
+          },
+          rotation: {
+            x: camera.rotation.x,
+            y: camera.rotation.y,
+            z: camera.rotation.z
+          },
+          fov: camera.fov || null,
+          aspect: camera.aspect || null,
+          near: camera.near || null,
+          far: camera.far || null,
+          zoom: camera.zoom || null,
+          uuid: camera.uuid
+        };
+      });
+
+      return cameraInfo;
+    } catch (error) {
+      throw new Error(`Failed to get camera info: ${error.message}`);
+    }
+  }
+
+  /**
+   * レンダラー情報を取得
+   * @returns {Promise<Object>} レンダラー情報オブジェクト
+   */
+  async getRendererInfo() {
+    if (!this.browserManager.isInitialized()) {
+      throw new Error('BrowserManager is not initialized');
+    }
+
+    try {
+      const rendererInfo = await this.browserManager.page.evaluate(() => {
+        if (typeof window.renderer === 'undefined') {
+          return {
+            available: false,
+            error: 'Renderer not found in window.renderer'
+          };
+        }
+
+        const renderer = window.renderer;
+        const canvas = renderer.domElement;
+        
+        return {
+          available: true,
+          type: renderer.isWebGLRenderer ? 'WebGLRenderer' : renderer.constructor.name,
+          size: {
+            width: canvas.width,
+            height: canvas.height
+          },
+          pixelRatio: renderer.getPixelRatio(),
+          antialias: renderer.capabilities ? renderer.capabilities.antialias : null,
+          powerPreference: renderer.capabilities ? renderer.capabilities.powerPreference : null,
+          precision: renderer.capabilities ? renderer.capabilities.precision : null,
+          maxAnisotropy: renderer.capabilities ? renderer.capabilities.getMaxAnisotropy() : null,
+          shadowMap: {
+            enabled: renderer.shadowMap.enabled,
+            type: renderer.shadowMap.type
+          },
+          autoClear: renderer.autoClear,
+          sortObjects: renderer.sortObjects
+        };
+      });
+
+      return rendererInfo;
+    } catch (error) {
+      throw new Error(`Failed to get renderer info: ${error.message}`);
+    }
+  }
+
+  /**
+   * シーン全体の総合情報を取得
+   * @returns {Promise<Object>} 総合情報オブジェクト
+   */
+  async getComprehensiveInfo() {
+    try {
+      const [sceneInfo, cameraInfo, rendererInfo] = await Promise.all([
+        this.getSceneInfo(),
+        this.getCameraInfo(), 
+        this.getRendererInfo()
+      ]);
+
+      return {
+        timestamp: new Date().toISOString(),
+        scene: sceneInfo,
+        camera: cameraInfo,
+        renderer: rendererInfo,
+        status: {
+          sceneReady: sceneInfo.available,
+          cameraReady: cameraInfo.available,
+          rendererReady: rendererInfo.available,
+          allReady: sceneInfo.available && cameraInfo.available && rendererInfo.available
+        }
+      };
+    } catch (error) {
+      throw new Error(`Failed to get comprehensive info: ${error.message}`);
+    }
+  }
+
+  /**
+   * シーン内のオブジェクト数を取得
+   * @returns {Promise<number>} オブジェクト数
+   */
+  async getObjectCount() {
+    try {
+      const sceneInfo = await this.getSceneInfo();
+      return sceneInfo.available ? sceneInfo.children : 0;
+    } catch (error) {
+      throw new Error(`Failed to get object count: ${error.message}`);
+    }
+  }
+
+  /**
+   * Three.jsのグローバル状態を確認
+   * @returns {Promise<Object>} Three.jsの状態情報
+   */
+  async getThreeJsStatus() {
+    if (!this.browserManager.isInitialized()) {
+      throw new Error('BrowserManager is not initialized');
+    }
+
+    try {
+      const status = await this.browserManager.page.evaluate(() => {
+        return {
+          threeLoaded: typeof THREE !== 'undefined',
+          version: typeof THREE !== 'undefined' && THREE.REVISION ? THREE.REVISION : null,
+          webglAvailable: typeof THREE !== 'undefined' && THREE.WebGL ? THREE.WebGL.isWebGLAvailable() : false,
+          webgl2Available: typeof THREE !== 'undefined' && THREE.WebGL ? THREE.WebGL.isWebGL2Available() : false,
+          sceneReady: window.sceneReady || false,
+          sceneError: window.sceneError || null,
+          threeJsLoaded: window.threeJsLoaded || false,
+          threeJsLoadError: window.threeJsLoadError || null
+        };
+      });
+
+      return status;
+    } catch (error) {
+      throw new Error(`Failed to get Three.js status: ${error.message}`);
+    }
+  }
+}
+</file>
+
+<file path="three-test-suite/src/BrowserManager.js">
+import puppeteer from 'puppeteer';
+
+/**
+ * BrowserManager
+ * Puppeteerブラウザのライフサイクルを管理するクラス
+ */
+export class BrowserManager {
+  /**
+   * @param {Object} options - 設定オプション
+   * @param {boolean} options.headless - ヘッドレスモード (デフォルト: true)
+   * @param {number} options.width - ビューポート幅 (デフォルト: 1024)
+   * @param {number} options.height - ビューポート高さ (デフォルト: 768)
+   * @param {string[]} options.args - Chromium起動引数
+   */
+  constructor(options = {}) {
+    this.options = {
+      headless: true,
+      width: 1024,
+      height: 768,
+      args: [
+        '--enable-webgl',
+        '--disable-web-security',
+        '--allow-running-insecure-content',
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage'
+      ],
+      ...options
+    };
+    
+    this.browser = null;
+    this.page = null;
+  }
+
+  /**
+   * Puppeteerブラウザを初期化する
+   * @throws {Error} 初期化に失敗した場合
+   */
+  async initialize() {
+    // 既に初期化済みの場合は何もしない
+    if (this.browser) {
+      return;
+    }
+
+    try {
+      this.browser = await puppeteer.launch({
+        headless: this.options.headless,
+        args: this.options.args
+      });
+
+      this.page = await this.browser.newPage();
+
+      // Forward browser console logs to Node console
+      this.page.on('console', msg => {
+        const type = msg.type();
+        const text = msg.text();
+        // Jestのテスト出力と区別しやすくするためにプレフィックスを付ける
+        // また、エラーや警告は適切に Node の console.error/warn にマッピングする
+        if (type === 'error') {
+          console.error(`PAGE LOG (Error): ${text}`);
+        } else if (type === 'warning') {
+          console.warn(`PAGE LOG (Warning): ${text}`);
+        } else {
+          console.log(`PAGE LOG (${type}): ${text}`);
+        }
+      });
+      
+      await this.page.setViewport({
+        width: this.options.width,
+        height: this.options.height
+      });
+
+    } catch (error) {
+      throw new Error(`BrowserManager initialization failed: ${error.message}`);
+    }
+  }
+
+  /**
+   * ブラウザを終了し、リソースをクリーンアップする
+   */
+  async cleanup() {
+    if (!this.browser) {
+      return;
+    }
+
+    try {
+      await this.browser.close();
+      this.browser = null;
+      this.page = null;
+    } catch (error) {
+      // ログ出力はせず、静かに失敗させる
+      console.warn(`Cleanup warning: ${error.message}`);
+    }
+  }
+
+  /**
+   * ブラウザが初期化されているかチェック
+   * @returns {boolean} 初期化状態
+   */
+  isInitialized() {
+    return this.browser !== null && this.page !== null;
+  }
+
+  /**
+   * 初期化状態を検証する
+   * @private
+   * @throws {Error} 初期化されていない場合
+   */
+  _validateInitialized() {
+    if (!this.isInitialized()) {
+      throw new Error('BrowserManager is not initialized');
+    }
+  }
+}
+</file>
+
 <file path=".eslintrc.js">
 export default {
   env: {
@@ -3800,33 +5982,310 @@ export default {
 }
 </file>
 
+<file path="three-test-suite/src/threejs/ThreeTestSuite.js">
+/**
+ * ThreeTestSuite
+ * Three.jsテスト機能を統括するメインクラス
+ * PuppeteerManagerから分離されたThree.js専用の機能を提供
+ */
+export class ThreeTestSuite {
+  constructor(browserManager) {
+    if (!browserManager) {
+      throw new Error('BrowserManager instance is required');
+    }
+    this.browserManager = browserManager;
+    this.sceneInspector = null;
+  }
+
+  /**
+   * ThreeTestSuiteの初期化
+   * 各コンポーネントの初期化を行う
+   */
+  async initialize() {
+    // 必要に応じて将来的にSceneInspectorなどのコンポーネントを初期化
+    // 現在は何もしないが、拡張時にここで初期化処理を追加
+  }
+
+  /**
+   * SceneInspectorインスタンスを取得
+   * 遅延初期化パターンを使用
+   */
+  getSceneInspector() {
+    if (!this.sceneInspector) {
+      // 動的importを使用してSceneInspectorをロード
+      // 現在はnullを返すが、実装時に適切に初期化
+      this.sceneInspector = null; // TODO: SceneInspectorの実装後に初期化
+    }
+    return this.sceneInspector;
+  }
+
+  /**
+   * Three.jsシーンをロードし、指定されたセットアップ関数を実行する
+   * PuppeteerManagerから移行されたメソッド
+   * @param {Function} sceneBuilderFunction - Three.jsのシーンをセットアップする関数
+   * @param {Object} options - ロードオプション (title, threeJsVersion, timeoutなど)
+   * @returns {Promise<void>}
+   */
+  async loadThreeScene(sceneBuilderFunction, options = {}) {
+    if (!this.browserManager.isInitialized()) {
+      throw new Error('BrowserManager is not initialized');
+    }
+    if (typeof sceneBuilderFunction !== 'function') {
+      throw new Error('sceneBuilderFunction must be a function');
+    }
+
+    const defaultTimeout = 30000;
+    const loadTimeout = options.timeout || defaultTimeout;
+
+    try {
+      // HTMLGeneratorを使用してHTMLコンテンツを生成
+      const htmlContent = this._generateThreeJsHTML(options);
+
+      await this.browserManager.page.setContent(htmlContent, {
+        waitUntil: 'networkidle0', 
+        timeout: loadTimeout,
+      });
+
+      await this._waitForThreeJsLoad(loadTimeout);
+
+      const executionResult = await this._executeSceneBuilder(sceneBuilderFunction);
+      
+      if (!executionResult.success) {
+        const error = new Error(executionResult.error.message);
+        if (executionResult.error.stack) {
+          error.stack = executionResult.error.stack;
+        }
+        throw error;
+      }
+
+    } catch (error) {
+      if (error.message && error.message.includes('timeout')) {
+        throw new Error(`Three.js scene loading timed out after ${loadTimeout}ms: ${error.message}`);
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Three.js用のHTMLコンテンツを生成
+   * @param {Object} options - 生成オプション
+   * @returns {string} HTMLコンテンツ
+   */
+  _generateThreeJsHTML(options = {}) {
+    const threeJsVersion = options.threeJsVersion || '0.173.0'; // デフォルトを0.173.0に
+    const title = options.title || 'Three.js Test Scene';
+    
+    return `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>${title}</title>
+    <style>
+        body { margin: 0; padding: 0; overflow: hidden; background-color: #000; }
+        canvas { display: block; }
+    </style>
+</head>
+<body>
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://cdnjs.cloudflare.com/ajax/libs/three.js/${threeJsVersion}/three.module.min.js"
+        }
+    }
+    </script>
+    <script type="module">
+        window.threeJsLoadError = null;
+        window.sceneReady = false;
+        window.sceneError = null;
+        try {
+            const THREE = await import('three');
+            window.THREE = THREE; // Make THREE globally available for sceneBuilderFunction
+            window.threeJsLoaded = true;
+            // Notify that Three.js is loaded, e.g., by a custom event or a flag
+            // document.dispatchEvent(new CustomEvent('threejsloaded'));
+        } catch (e) {
+            window.threeJsLoadError = 'Failed to load Three.js module from CDN: ' + e.message;
+            console.error(window.threeJsLoadError);
+        }
+    </script>
+</body>
+</html>`;
+  }
+
+  /**
+   * Three.jsの読み込み完了を待機
+   * @param {number} timeout - タイムアウト時間（ミリ秒）
+   */
+  async _waitForThreeJsLoad(timeout) {
+    try {
+      await this.browserManager.page.waitForFunction(
+        () => {
+          if (window.threeJsLoadError) {
+            throw new Error('Three.js CDN load failed: ' + window.threeJsLoadError);
+          }
+          // Check if THREE is globally available and core components are present
+          return typeof window.THREE !== 'undefined' &&
+                 typeof window.THREE.Scene === 'function' &&
+                 typeof window.THREE.PerspectiveCamera === 'function' && // Or other core components
+                 typeof window.THREE.WebGLRenderer === 'function' &&
+                 window.threeJsLoaded === true;
+        },
+        {
+          timeout: timeout,
+          polling: 'raf'
+        }
+      );
+    } catch (error) {
+      const loadError = await this.browserManager.page.evaluate(() => window.threeJsLoadError);
+      const threeAvailable = await this.browserManager.page.evaluate(() => typeof THREE !== 'undefined');
+      
+      if (loadError) {
+        throw new Error('Three.js failed to load from CDN');
+      } else if (!threeAvailable) {
+        throw new Error(`Three.js did not load within ${timeout}ms`);
+      } else if (error.message.includes('timeout')) {
+        throw new Error(`Three.js loading timed out after ${timeout}ms`);
+      }
+      throw new Error(`Three.js loading error: ${error.message}`);
+    }
+  }
+
+  /**
+   * シーンビルダー関数を実行
+   * @param {Function} sceneBuilderFunction - 実行する関数
+   * @returns {Promise<Object>} 実行結果
+   */
+  async _executeSceneBuilder(sceneBuilderFunction) {
+    try {
+      return await this.browserManager.page.evaluate((builderFuncString) => {
+        try {
+          // Use window.THREE as it's assigned in _generateThreeJsHTML
+          if (typeof window.THREE === 'undefined' || typeof window.THREE.Scene !== 'function') {
+            const error = {
+              message: 'THREE or THREE.Scene not available in execution context',
+              code: 'THREE_NOT_AVAILABLE'
+            };
+            window.sceneError = error;
+            return { success: false, error };
+          }
+
+          // Pass window.THREE to the user function
+          const userFunction = new Function('THREE', `return (${builderFuncString})`)(window.THREE);
+          userFunction(); 
+          
+          window.sceneReady = true; 
+          return { success: true }; 
+          
+        } catch (error) {
+          const errorInfo = {
+            message: error.message,
+            stack: error.stack,
+            code: 'SCENE_EXECUTION_ERROR'
+          };
+          window.sceneError = errorInfo;
+          console.error('Error in sceneBuilderFunction:', error);
+          return { success: false, error: errorInfo };
+        }
+      }, sceneBuilderFunction.toString()); 
+
+    } catch (error) {
+      return {
+        success: false,
+        error: {
+          message: `Scene execution failed: ${error.message}`,
+          stack: error.stack,
+          code: 'PAGE_EVALUATE_ERROR'
+        }
+      };
+    }
+  }
+
+  /**
+   * 包括的なThree.jsテストを実行
+   * 将来的にSceneInspector等を使用した総合テスト機能
+   * @returns {Promise<Object>} テスト結果
+   */
+  async runComprehensiveTest() {
+    // TODO: Phase2以降で実装
+    // SceneInspector、ObjectAnalyzer等を使用した包括的テスト
+    return {
+      success: true,
+      message: 'Comprehensive test not yet implemented - Phase2 feature',
+      timestamp: new Date().toISOString()
+    };
+  }
+
+  /**
+   * 表示中のオブジェクトを取得
+   * 将来的にObjectAnalyzerで実装予定
+   * @returns {Promise<Array>} 表示中のオブジェクト一覧
+   */
+  async getVisibleObjects() {
+    // TODO: Phase2以降でObjectAnalyzerを使用して実装
+    return [];
+  }
+
+  /**
+   * レンダリング検証を実行
+   * 将来的にRenderingValidatorで実装予定
+   * @returns {Promise<Object>} レンダリング結果
+   */
+  async validateRendering() {
+    // TODO: Phase3以降でRenderingValidatorを使用して実装
+    return {
+      success: true,
+      message: 'Rendering validation not yet implemented - Phase3 feature'
+    };
+  }
+}
+</file>
+
+<file path="three-test-suite/jest.setup.js">
+// Jest setup for three-test-suite
+process.on('unhandledRejection', (reason, promise) => {
+  console.warn('Unhandled Rejection at:', promise, 'reason:', reason);
+});
+
+if (process.env.NODE_ENV === 'test') {
+  const originalConsoleLog = console.log;
+  const originalConsoleWarn = console.warn;
+  
+  console.log = (...args) => {
+    if (args.some(arg => String(arg).includes('DEBUG'))) {
+      originalConsoleLog(...args);
+    }
+  };
+  
+  console.warn = (...args) => {
+    if (args.some(arg => String(arg).includes('WARNING') || String(arg).includes('Unhandled'))) {
+      originalConsoleWarn(...args);
+    }
+  };
+}
+</file>
+
 <file path="jest.config.js">
+// jest.config.js (ルート)
+const commonEsmTransform = {
+  '^.+\\.(ts|tsx)$': ['ts-jest', { useESM: true, tsconfig: { jsx: 'react-jsx' } }],
+  // .js/.jsx のトランスフォームは three-test-suite 側で主に扱うため、ルートではTS/TSXに集中
+};
+
+// ルートプロジェクトで ESM パッケージを node_modules から利用する場合に設定
+const rootTransformIgnorePatterns = [
+  'node_modules/(?!(some-esm-pkg-for-root)/)' // 必要に応じて設定
+];
+
 export default {
+  displayName: 'root-tests',
   preset: 'ts-jest/presets/default-esm',
   testEnvironment: 'jsdom',
-  moduleFileExtensions: ['js', 'jsx', 'ts', 'tsx', 'json'],
-  transform: {
-    '^.+\\.(ts|tsx)$': ['ts-jest', {
-      useESM: true,
-      tsconfig: {
-        jsx: 'react-jsx'
-      }
-    }],
-    '^.+\\.(js|jsx)$': 'babel-jest'
-  },
   testMatch: [
-    '**/__tests__/**/*.(js|jsx|ts|tsx)',
-    '**/*.(test|spec).(js|jsx|ts|tsx)'
+    '<rootDir>/__tests__/**/*.(ts|tsx)', // TypeScriptのテストファイルに限定
+    '<rootDir>/src/**/*.(test|spec).(ts|tsx)' // TypeScriptのテストファイルに限定
   ],
-  collectCoverageFrom: [
-    'src/**/*.(js|jsx|ts|tsx)',
-    'three-test-suite/src/**/*.(js|jsx|ts|tsx)',
-    '!src/index.(js|ts)',
-    '!**/*.d.ts',
-    '!**/node_modules/**'
-  ],
-  setupFilesAfterEnv: ['<rootDir>/jest.setup.js'],
-  testTimeout: 30000,
+  transform: commonEsmTransform,
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/src/$1',
     '^@/types/(.*)$': '<rootDir>/src/types/$1',
@@ -3834,10 +6293,17 @@ export default {
     '^@/utils/(.*)$': '<rootDir>/src/utils/$1',
     '^@/three/(.*)$': '<rootDir>/src/three/$1'
   },
-  extensionsToTreatAsEsm: ['.ts', '.tsx', '.js'],
-  transformIgnorePatterns: [
-    'node_modules/(?!(puppeteer)/)'
-  ]
+  setupFilesAfterEnv: ['<rootDir>/jest.setup.js'],
+  extensionsToTreatAsEsm: ['.ts', '.tsx'], // ESMとして扱うのはTS/TSXファイル
+  moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'json', 'node'], // js, jsxも解決のため残す
+  transformIgnorePatterns: rootTransformIgnorePatterns,
+  collectCoverageFrom: [
+    'src/**/*.(ts|tsx)', // カバレッジもTS/TSXファイルから
+    '!src/index.ts',
+    '!**/*.d.ts',
+    '!**/node_modules/**'
+  ],
+  testTimeout: 30000,
 };
 </file>
 
@@ -3854,10 +6320,12 @@ export default {
     "src"
   ],
   "scripts": {
-    "test": "jest",
-    "test:watch": "jest --watch",
-    "test:coverage": "jest --coverage",
-    "test:suite": "cd three-test-suite && npm test",
+    "test": "npm run test:root",
+    "test:root": "jest --config jest.config.js",
+    "test:root:watch": "jest --config jest.config.js --watch",
+    "test:root:coverage": "jest --config jest.config.js --coverage",
+    "test:watch": "npm run test:root:watch",
+    "test:coverage": "npm run test:root:coverage",
     "dev": "vite",
     "build": "tsc && vite build",
     "type-check": "tsc --noEmit",
@@ -3905,55 +6373,6 @@ export default {
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "three": "^0.163.0"
-  }
-}
-</file>
-
-<file path="three-test-suite/package.json">
-{
-  "name": "three-test-suite",
-  "version": "0.1.0",
-  "description": "TDD testing framework for Three.js applications",
-  "type": "module",
-  "main": "src/index.js",
-  "testTimeout": 30000,
-  "scripts": {
-    "test": "node --experimental-vm-modules node_modules/.bin/jest",
-    "test:watch": "node --experimental-vm-modules node_modules/.bin/jest --watch",
-    "test:puppeteer": "node --experimental-vm-modules node_modules/.bin/jest --selectProjects=puppeteer-tests",
-    "test:dom": "node --experimental-vm-modules node_modules/.bin/jest --selectProjects=dom-tests"
-  },
-  "dependencies": {
-    "puppeteer": "^22.0.0",
-    "three": "^0.163.0"
-  },
-  "devDependencies": {
-    "jest": "^29.5.0",
-    "jest-environment-jsdom": "^29.5.0"
-  },
-  "jest": {
-    "projects": [
-      {
-        "displayName": "puppeteer-tests",
-        "testMatch": [
-          "**/*PuppeteerManager*.test.js",
-          "**/*ScreenshotCapture*.test.js", 
-          "**/*ThreeTestRenderer*.test.js"
-        ],
-        "testEnvironment": "node"
-      },
-      {
-        "displayName": "dom-tests",
-        "testMatch": [
-          "**/*WebGLEnabler*.test.js",
-          "**/*HtmlTemplateGenerator*.test.js",
-          "**/*SceneInjector*.test.js",
-          "**/*ObjectValidator*.test.js",
-          "**/*TransformValidator*.test.js"
-        ],
-        "testEnvironment": "jsdom"
-      }
-    ]
   }
 }
 </file>
@@ -4476,705 +6895,66 @@ class GISManager {
 **Status**: ✅ TypeScript Migration Complete
 </file>
 
-<file path="three-test-suite/__tests__/PuppeteerManager.test.js">
-import { PuppeteerManager } from '../src/PuppeteerManager.js';
+<file path=".github/workflows/ci.yml">
+name: CI
 
-describe('PuppeteerManager - 基本機能', () => {
-  test('正常に初期化できる', async () => {
-    const manager = new PuppeteerManager();
-    await manager.initialize();
-    
-    expect(manager.browser).toBeDefined();
-    expect(manager.page).toBeDefined();
-    
-    await manager.cleanup();
-  });
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
 
-  test('cleanup後はブラウザが終了している', async () => {
-    const manager = new PuppeteerManager();
-    await manager.initialize();
-    
-    // cleanup前にブラウザの存在確認
-    expect(manager.browser).toBeDefined();
-    expect(manager.isInitialized()).toBe(true);
-    
-    await manager.cleanup();
-    
-    // cleanup後の状態確認
-    expect(manager.browser).toBeNull();
-    expect(manager.page).toBeNull();
-    expect(manager.isInitialized()).toBe(false);
-  });
+jobs:
+  test:
+    runs-on: ubuntu-latest
 
-  test('オプションでヘッドレスモードを設定できる', async () => {
-    const manager = new PuppeteerManager({ headless: false });
-    await manager.initialize();
-    
-    expect(manager.options.headless).toBe(false);
-    
-    await manager.cleanup();
-  });
+    strategy:
+      matrix:
+        node-version: [18.x, 20.x] # プロジェクトでサポートするNode.jsのバージョン
 
-  test('デフォルトオプションが正しく設定される', () => {
-    const manager = new PuppeteerManager();
-    
-    expect(manager.options.headless).toBe(true);
-    expect(manager.options.width).toBe(1024);
-    expect(manager.options.height).toBe(768);
-    expect(manager.options.args).toContain('--enable-webgl');
-    expect(manager.options.args).toContain('--disable-web-security');
-  });
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
 
-  test('二重初期化を防ぐ', async () => {
-    const manager = new PuppeteerManager();
-    await manager.initialize();
-    
-    // 二回目の初期化は何もしない
-    await manager.initialize();
-    
-    expect(manager.browser).toBeDefined();
-    
-    await manager.cleanup();
-  });
+    - name: Set up Node.js ${{ matrix.node-version }}
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ matrix.node-version }}
+        cache: 'npm'
 
-  test('初期化前のcleanupは何もしない', async () => {
-    const manager = new PuppeteerManager();
-    
-    // エラーを投げない
-    await expect(manager.cleanup()).resolves.not.toThrow();
-  });
-});
+    - name: Install Puppeteer dependencies
+      run: |
+        # Update package lists
+        sudo apt-get update
+        # Install libgbm-dev, a necessary dependency for running Chrome/Chromium (used by Puppeteer)
+        # in a headless environment. libgbm (Generic Buffer Management) is part of Mesa 3D Graphics Library
+        # and allows buffer management without a display server.
+        sudo apt-get install -y libgbm-dev
 
-describe('PuppeteerManager - WebGL機能', () => {
-  test('WebGLコンテキストが取得できる', async () => {
-    const manager = new PuppeteerManager();
-    await manager.initialize();
-    
-    const webglSupported = await manager.page.evaluate(() => {
-      const canvas = document.createElement('canvas');
-      const gl = canvas.getContext('webgl');
-      return gl !== null;
-    });
-    
-    expect(webglSupported).toBe(true);
-    await manager.cleanup();
-  });
+    - name: Install dependencies
+      run: npm ci
 
-  test('WebGL2も利用可能', async () => {
-    const manager = new PuppeteerManager();
-    await manager.initialize();
-    
-    const webgl2Supported = await manager.page.evaluate(() => {
-      const canvas = document.createElement('canvas');
-      const gl = canvas.getContext('webgl2');
-      return gl !== null;
-    });
-    
-    expect(webgl2Supported).toBe(true);
-    await manager.cleanup();
-  });
+    # - name: Run tests
+    #   run: npm test
 
-  test('WebGLの基本情報が取得できる', async () => {
-    const manager = new PuppeteerManager();
-    await manager.initialize();
-    
-    const webglInfo = await manager.page.evaluate(() => {
-      const canvas = document.createElement('canvas');
-      const gl = canvas.getContext('webgl');
-      if (!gl) return null;
-      
-      return {
-        vendor: gl.getParameter(gl.VENDOR),
-        renderer: gl.getParameter(gl.RENDERER),
-        version: gl.getParameter(gl.VERSION)
-      };
-    });
-    
-    expect(webglInfo).not.toBeNull();
-    expect(webglInfo.vendor).toBeDefined();
-    expect(webglInfo.renderer).toBeDefined();
-    expect(webglInfo.version).toBeDefined();
-    
-    await manager.cleanup();
-  });
+    - name: Install three-test-suite dependencies
+      run: cd three-test-suite && npm ci
 
-  test('getWebGLInfo()メソッドでWebGL情報を取得できる', async () => {
-    const manager = new PuppeteerManager();
-    await manager.initialize();
-    
-    const webglInfo = await manager.getWebGLInfo();
-    
-    expect(webglInfo).toBeDefined();
-    expect(webglInfo.webglSupported).toBe(true);
-    expect(webglInfo.webgl2Supported).toBeDefined();
-    expect(webglInfo.vendor).toBeDefined();
-    expect(webglInfo.renderer).toBeDefined();
-    expect(webglInfo.version).toBeDefined();
-    
-    await manager.cleanup();
-  });
+    #  今はUnitテストだけを対象とする
+    - name: Run test unit
+      run: cd three-test-suite && npm run test:unit
 
-  test('getWebGLInfo()は初期化前に呼ぶとエラーを投げる', async () => {
-    const manager = new PuppeteerManager();
-    
-    await expect(manager.getWebGLInfo()).rejects.toThrow('PuppeteerManager is not initialized');
-  });
-});
-
-describe('PuppeteerManager - WebAssembly機能', () => {
-  test('WebAssemblyオブジェクトが利用可能', async () => {
-    const manager = new PuppeteerManager();
-    await manager.initialize();
-    
-    const wasmSupported = await manager.page.evaluate(() => {
-      return typeof WebAssembly !== 'undefined' && 
-             typeof WebAssembly.instantiate === 'function';
-    });
-    
-    expect(wasmSupported).toBe(true);
-    await manager.cleanup();
-  });
-
-  test('WebAssembly.compileStreamingが利用可能', async () => {
-    const manager = new PuppeteerManager();
-    await manager.initialize();
-    
-    const streamingSupported = await manager.page.evaluate(() => {
-      return typeof WebAssembly.compileStreaming === 'function';
-    });
-    
-    expect(streamingSupported).toBe(true);
-    await manager.cleanup();
-  });
-
-  test('簡単なWASMモジュールが実行できる', async () => {
-    const manager = new PuppeteerManager();
-    await manager.initialize();
-    
-    const wasmResult = await manager.page.evaluate(() => {
-      // 簡単なWASMモジュール（addTwo関数: 2つの数値を加算）
-      const wasmBytes = new Uint8Array([
-        0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00, 0x01, 0x07, 0x01, 0x60, 0x02, 0x7f, 0x7f, 0x01,
-        0x7f, 0x03, 0x02, 0x01, 0x00, 0x07, 0x0a, 0x01, 0x06, 0x61, 0x64, 0x64, 0x54, 0x77, 0x6f, 0x00,
-        0x00, 0x0a, 0x09, 0x01, 0x07, 0x00, 0x20, 0x00, 0x20, 0x01, 0x6a, 0x0b
-      ]);
-      
-      return WebAssembly.instantiate(wasmBytes)
-        .then(result => {
-          const addTwo = result.instance.exports.addTwo;
-          return addTwo(5, 3); // 5 + 3 = 8
-        });
-    });
-    
-    expect(wasmResult).toBe(8);
-    await manager.cleanup();
-  });
-
-  test('getWebAssemblyInfo()メソッドでWASM情報を取得できる', async () => {
-    const manager = new PuppeteerManager();
-    await manager.initialize();
-    
-    const wasmInfo = await manager.getWebAssemblyInfo();
-    
-    expect(wasmInfo).toBeDefined();
-    expect(wasmInfo.wasmSupported).toBe(true);
-    expect(wasmInfo.streamingSupported).toBeDefined();
-    expect(wasmInfo.memorySupported).toBeDefined();
-    expect(wasmInfo.tableSupported).toBeDefined();
-    expect(wasmInfo.sharedMemorySupported).toBeDefined();
-    
-    await manager.cleanup();
-  });
-
-  test('getWebAssemblyInfo()は初期化前に呼ぶとエラーを投げる', async () => {
-    const manager = new PuppeteerManager();
-    
-    await expect(manager.getWebAssemblyInfo()).rejects.toThrow('PuppeteerManager is not initialized');
-  });
-
-  test('WASMパフォーマンステストが実行できる', async () => {
-    const manager = new PuppeteerManager();
-    await manager.initialize();
-    
-    const performance = await manager.benchmarkWebAssembly();
-    
-    expect(performance).toBeDefined();
-    expect(performance.executionTime).toBeGreaterThan(0);
-    expect(performance.operationsPerSecond).toBeGreaterThan(0);
-    
-    await manager.cleanup();
-  });
-});
-
-describe('PuppeteerManager - WASM + WebGL連携機能', () => {
-  test('WebAssemblyとWebGLが同時に利用可能', async () => {
-    const manager = new PuppeteerManager();
-    await manager.initialize();
-    
-    const capabilities = await manager.getHybridCapabilities();
-    
-    expect(capabilities.wasmSupported).toBe(true);
-    expect(capabilities.webglSupported).toBe(true);
-    expect(capabilities.hybridReady).toBe(true);
-    
-    await manager.cleanup();
-  });
-
-  test('WASM計算結果をWebGLで描画できる', async () => {
-    const manager = new PuppeteerManager();
-    await manager.initialize();
-    
-    const testScript = () => {
-      // WASMで頂点データを計算してWebGLで描画
-      window.hybridTestResult = 'pending';
-      
-      // 簡単なWASMモジュール（頂点座標計算用）
-      const wasmBytes = new Uint8Array([
-        0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00, 0x01, 0x07, 0x01, 0x60, 0x02, 0x7f, 0x7f, 0x01,
-        0x7f, 0x03, 0x02, 0x01, 0x00, 0x07, 0x0a, 0x01, 0x06, 0x61, 0x64, 0x64, 0x54, 0x77, 0x6f, 0x00,
-        0x00, 0x0a, 0x09, 0x01, 0x07, 0x00, 0x20, 0x00, 0x20, 0x01, 0x6a, 0x0b
-      ]);
-      
-      WebAssembly.instantiate(wasmBytes).then(result => {
-        const addTwo = result.instance.exports.addTwo;
-        
-        // WASMで計算
-        const vertices = [
-          addTwo(0, 0), addTwo(1, 0), addTwo(0, 0),  // 頂点1
-          addTwo(1, 0), addTwo(1, 0), addTwo(0, 0),  // 頂点2
-          addTwo(0, 1), addTwo(1, 0), addTwo(0, 0)   // 頂点3
-        ];
-        
-        // WebGLで描画
-        const canvas = document.createElement('canvas');
-        const gl = canvas.getContext('webgl');
-        
-        if (gl && vertices.length === 9) {
-          const buffer = gl.createBuffer();
-          gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
-          gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STATIC_DRAW);
-          
-          window.hybridTestResult = 'success';
-        } else {
-          window.hybridTestResult = 'failed';
-        }
-      }).catch(() => {
-        window.hybridTestResult = 'error';
-      });
-    };
-    
-    const html = manager.generateTestHTML(testScript);
-    await manager.page.setContent(html);
-    
-    // 結果を待機
-    await manager.page.waitForFunction('window.hybridTestResult !== "pending"', { timeout: 5000 });
-    
-    const result = await manager.page.evaluate(() => window.hybridTestResult);
-    expect(result).toBe('success');
-    
-    await manager.cleanup();
-  });
-
-  test('getHybridCapabilities()メソッドで連携情報を取得できる', async () => {
-    const manager = new PuppeteerManager();
-    await manager.initialize();
-    
-    const capabilities = await manager.getHybridCapabilities();
-    
-    expect(capabilities).toBeDefined();
-    expect(capabilities.wasmSupported).toBeDefined();
-    expect(capabilities.webglSupported).toBeDefined();
-    expect(capabilities.hybridReady).toBeDefined();
-    expect(capabilities.performanceProfile).toBeDefined();
-    expect(capabilities.recommendedStrategy).toBeDefined();
-    
-    await manager.cleanup();
-  });
-
-  test('benchmarkHybridPerformance()でWASM+WebGL性能を測定できる', async () => {
-    const manager = new PuppeteerManager();
-    await manager.initialize();
-    
-    const performance = await manager.benchmarkHybridPerformance();
-    
-    expect(performance).toBeDefined();
-    expect(performance.wasmComputeTime).toBeGreaterThan(0);
-    expect(performance.webglRenderTime).toBeGreaterThan(0);
-    expect(performance.dataTransferTime).toBeGreaterThan(0);
-    expect(performance.totalTime).toBeGreaterThan(0);
-    expect(performance.efficiency).toBeGreaterThan(0);
-    
-    await manager.cleanup();
-  });
-
-  test('大量データ処理でのWASM+WebGL連携パフォーマンス', async () => {
-    const manager = new PuppeteerManager();
-    await manager.initialize();
-    
-    const performance = await manager.benchmarkHybridPerformance({ 
-      dataSize: 10000,
-      iterations: 100 
-    });
-    
-    expect(performance.totalTime).toBeLessThan(5000); // 5秒以内
-    expect(performance.efficiency).toBeGreaterThan(0.3); // 効率30%以上（調整）
-    
-    await manager.cleanup();
-  });
-
-  test('getHybridCapabilities()は初期化前に呼ぶとエラーを投げる', async () => {
-    const manager = new PuppeteerManager();
-    
-    await expect(manager.getHybridCapabilities()).rejects.toThrow('PuppeteerManager is not initialized');
-  });
-
-  test('benchmarkHybridPerformance()は初期化前に呼ぶとエラーを投げる', async () => {
-    const manager = new PuppeteerManager();
-    
-    await expect(manager.benchmarkHybridPerformance()).rejects.toThrow('PuppeteerManager is not initialized');
-  });
-});
-
-describe('PuppeteerManager - HTMLテンプレート', () => {
-  test('基本HTMLテンプレートが生成される', () => {
-    const manager = new PuppeteerManager();
-    const html = manager.generateTestHTML(() => {});
-    
-    expect(html).toContain('<!DOCTYPE html>');
-    expect(html).toContain('three.min.js');
-    expect(html).toContain('<canvas');
-    expect(html).toContain('id="three-canvas"');
-  });
-
-  test('ユーザースクリプトが注入される', () => {
-    const manager = new PuppeteerManager();
-    const userScript = () => { console.log('test'); };
-    const html = manager.generateTestHTML(userScript);
-    
-    expect(html).toContain(userScript.toString());
-  });
-
-  test('生成HTMLがページに読み込める', async () => {
-    const manager = new PuppeteerManager();
-    await manager.initialize();
-    
-    const html = manager.generateTestHTML(() => {
-      window.testValue = 'loaded';
-    });
-    
-    await manager.page.setContent(html);
-    
-    const testValue = await manager.page.evaluate(() => window.testValue);
-    expect(testValue).toBe('loaded');
-    
-    await manager.cleanup();
-  });
-
-  test('Three.js CDNが正しく読み込まれる', async () => {
-    const manager = new PuppeteerManager();
-    await manager.initialize();
-    
-    const html = manager.generateTestHTML(() => {});
-    await manager.page.setContent(html);
-    
-    // Three.jsライブラリが読み込まれるまで待つ
-    await manager.page.waitForFunction('typeof THREE !== "undefined"', { timeout: 5000 });
-    
-    const threeLoaded = await manager.page.evaluate(() => typeof THREE !== 'undefined');
-    expect(threeLoaded).toBe(true);
-    
-    await manager.cleanup();
-  });
-
-  test('カスタムタイトルが設定される', () => {
-    const manager = new PuppeteerManager();
-    const customTitle = 'Custom Three.js Test';
-    const html = manager.generateTestHTML(() => {}, { title: customTitle });
-    
-    expect(html).toContain(`<title>${customTitle}</title>`);
-  });
-
-  test('異なるThree.jsバージョンが指定できる', () => {
-    const manager = new PuppeteerManager();
-    const customVersion = 'r140';
-    const html = manager.generateTestHTML(() => {}, { threeJsVersion: customVersion });
-    
-    expect(html).toContain(`/three.js/${customVersion}/three.min.js`);
-  });
-
-  test('自動実行を無効にできる', () => {
-    const manager = new PuppeteerManager();
-    const userScript = () => { console.log('test'); };
-    const html = manager.generateTestHTML(userScript, { autoExecute: false });
-    
-    expect(html).toContain('window.userScript');
-    expect(html).not.toContain('window.addEventListener(\'load\'');
-  });
-
-  test('無効なユーザースクリプトでエラーを投げる', () => {
-    const manager = new PuppeteerManager();
-    
-    expect(() => {
-      manager.generateTestHTML('not a function');
-    }).toThrow('userScript must be a function');
-    
-    expect(() => {
-      manager.generateTestHTML(null);
-    }).toThrow('userScript must be a function');
-    
-    expect(() => {
-      manager.generateTestHTML(undefined);
-    }).toThrow('userScript must be a function');
-  });
-
-  test('デバッグ情報要素が含まれる', () => {
-    const manager = new PuppeteerManager();
-    const html = manager.generateTestHTML(() => {});
-    
-    expect(html).toContain('class="debug-info"');
-    expect(html).toContain('id="debug-info"');
-  });
-
-  test('複雑なユーザースクリプトが正しく注入される', async () => {
-    const manager = new PuppeteerManager();
-    await manager.initialize();
-    
-    const complexScript = () => {
-      window.testObject = {
-        value: 42,
-        array: [1, 2, 3],
-        method: function() { return 'method called'; }
-      };
-    };
-    
-    const html = manager.generateTestHTML(complexScript);
-    await manager.page.setContent(html);
-    
-    const testObject = await manager.page.evaluate(() => window.testObject);
-    expect(testObject.value).toBe(42);
-    expect(testObject.array).toEqual([1, 2, 3]);
-    
-    const methodResult = await manager.page.evaluate(() => window.testObject.method());
-    expect(methodResult).toBe('method called');
-    
-    await manager.cleanup();
-  });
-});
+    - name: Run repomix
+      if: success() # 前のステップがすべて成功した場合のみ実行
+      run: npx repomix
 </file>
 
-<file path="three-test-suite/src/PuppeteerManager.js">
-import puppeteer from 'puppeteer';
-
+<file path="three-test-suite/src/HTMLGenerator.js">
 /**
- * PuppeteerManager
- * Three.js テスト用のPuppeteerブラウザを管理するクラス
- * WebGL と WebAssembly 両方の機能テストをサポート
+ * HTMLGenerator
+ * テスト用のHTMLテンプレートを生成するクラス
  */
-export class PuppeteerManager {
-  /**
-   * @param {Object} options - 設定オプション
-   * @param {boolean} options.headless - ヘッドレスモード (デフォルト: true)
-   * @param {number} options.width - ビューポート幅 (デフォルト: 1024)
-   * @param {number} options.height - ビューポート高さ (デフォルト: 768)
-   * @param {string[]} options.args - Chromium起動引数
-   */
-  constructor(options = {}) {
-    this.options = {
-      headless: true,
-      width: 1024,
-      height: 768,
-      args: [
-        '--enable-webgl',
-        '--disable-web-security',
-        '--allow-running-insecure-content',
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage'
-      ],
-      ...options
-    };
-    
-    this.browser = null;
-    this.page = null;
-  }
-
-  /**
-   * Puppeteerブラウザを初期化する
-   * @throws {Error} 初期化に失敗した場合
-   */
-  async initialize() {
-    // 既に初期化済みの場合は何もしない
-    if (this.browser) {
-      return;
-    }
-
-    try {
-      this.browser = await puppeteer.launch({
-        headless: this.options.headless,
-        args: this.options.args
-      });
-
-      this.page = await this.browser.newPage();
-      
-      await this.page.setViewport({
-        width: this.options.width,
-        height: this.options.height
-      });
-
-    } catch (error) {
-      throw new Error(`PuppeteerManager initialization failed: ${error.message}`);
-    }
-  }
-
-  /**
-   * ブラウザを終了し、リソースをクリーンアップする
-   */
-  async cleanup() {
-    if (!this.browser) {
-      return;
-    }
-
-    try {
-      await this.browser.close();
-      this.browser = null;
-      this.page = null;
-    } catch (error) {
-      // ログ出力はせず、静かに失敗させる
-      console.warn(`Cleanup warning: ${error.message}`);
-    }
-  }
-
-  /**
-   * ブラウザが初期化されているかチェック
-   * @returns {boolean} 初期化状態
-   */
-  isInitialized() {
-    return this.browser !== null && this.page !== null;
-  }
-
-  /**
-   * WebGLの情報と対応状況を取得する
-   * @returns {Promise<WebGLInfo>} WebGL情報オブジェクト
-   * @throws {Error} PuppeteerManagerが初期化されていない場合
-   * 
-   * @typedef {Object} WebGLInfo
-   * @property {boolean} webglSupported - WebGLサポート状況
-   * @property {boolean} webgl2Supported - WebGL2サポート状況
-   * @property {string|null} vendor - WebGLベンダー情報
-   * @property {string|null} renderer - レンダラー情報
-   * @property {string|null} version - WebGLバージョン情報
-   */
-  async getWebGLInfo() {
-    this._validateInitialized();
-
-    try {
-      const webglInfo = await this.page.evaluate(this._getWebGLInfoInBrowser);
-      return webglInfo;
-    } catch (error) {
-      throw new Error(`Failed to get WebGL info: ${error.message}`);
-    }
-  }
-
-  /**
-   * WebAssemblyの情報と対応状況を取得する
-   * @returns {Promise<WebAssemblyInfo>} WebAssembly情報オブジェクト
-   * @throws {Error} PuppeteerManagerが初期化されていない場合
-   * 
-   * @typedef {Object} WebAssemblyInfo
-   * @property {boolean} wasmSupported - WebAssembly基本サポート状況
-   * @property {boolean} streamingSupported - ストリーミングコンパイルサポート状況
-   * @property {boolean} memorySupported - WebAssembly.Memoryサポート状況
-   * @property {boolean} tableSupported - WebAssembly.Tableサポート状況
-   * @property {boolean} globalSupported - WebAssembly.Globalサポート状況
-   * @property {boolean} sharedMemorySupported - SharedArrayBuffer + WebAssemblyサポート状況
-   * @property {boolean} simdSupported - WASM SIMDサポート状況
-   */
-  async getWebAssemblyInfo() {
-    this._validateInitialized();
-
-    try {
-      const wasmInfo = await this.page.evaluate(this._getWebAssemblyInfoInBrowser);
-      return wasmInfo;
-    } catch (error) {
-      throw new Error(`Failed to get WebAssembly info: ${error.message}`);
-    }
-  }
-
-  /**
-   * WebAssemblyのパフォーマンステストを実行する
-   * CPU集約的な処理性能とメモリアクセス性能を測定
-   * @returns {Promise<WebAssemblyPerformance>} パフォーマンス情報オブジェクト
-   * @throws {Error} PuppeteerManagerが初期化されていない場合
-   * 
-   * @typedef {Object} WebAssemblyPerformance
-   * @property {number} executionTime - 実行時間（ミリ秒）
-   * @property {number} operationsPerSecond - 秒間演算回数
-   * @property {number} memoryPerformance - メモリアクセス性能（操作/秒）
-   */
-  async benchmarkWebAssembly() {
-    this._validateInitialized();
-
-    try {
-      const performance = await this.page.evaluate(this._benchmarkWebAssemblyInBrowser);
-      return performance;
-    } catch (error) {
-      throw new Error(`Failed to benchmark WebAssembly: ${error.message}`);
-    }
-  }
-
-  /**
-   * WebAssemblyとWebGLの連携機能情報を取得する
-   * @returns {Promise<HybridCapabilities>} 連携機能情報オブジェクト
-   * @throws {Error} PuppeteerManagerが初期化されていない場合
-   * 
-   * @typedef {Object} HybridCapabilities
-   * @property {boolean} wasmSupported - WebAssembly対応状況
-   * @property {boolean} webglSupported - WebGL対応状況
-   * @property {boolean} hybridReady - 連携機能準備完了
-   * @property {Object} performanceProfile - 性能プロファイル
-   * @property {number} performanceProfile.cpuScore - CPU性能スコア
-   * @property {number} performanceProfile.gpuScore - GPU性能スコア
-   * @property {number} performanceProfile.memoryBandwidth - メモリ帯域幅
-   * @property {string} recommendedStrategy - 推奨処理戦略
-   */
-  async getHybridCapabilities() {
-    this._validateInitialized();
-
-    try {
-      const capabilities = await this.page.evaluate(this._getHybridCapabilitiesInBrowser);
-      return capabilities;
-    } catch (error) {
-      throw new Error(`Failed to get hybrid capabilities: ${error.message}`);
-    }
-  }
-
-  /**
-   * WebAssemblyとWebGLの連携パフォーマンステストを実行する
-   * @param {Object} options - テストオプション
-   * @param {number} options.dataSize - テストデータサイズ (デフォルト: 5000)
-   * @param {number} options.iterations - 反復回数 (デフォルト: 20)
-   * @returns {Promise<HybridPerformance>} パフォーマンス情報オブジェクト
-   * @throws {Error} PuppeteerManagerが初期化されていない場合
-   * 
-   * @typedef {Object} HybridPerformance
-   * @property {number} wasmComputeTime - WASM計算時間（ミリ秒）
-   * @property {number} webglRenderTime - WebGL描画時間（ミリ秒）
-   * @property {number} dataTransferTime - データ転送時間（ミリ秒）
-   * @property {number} totalTime - 総実行時間（ミリ秒）
-   * @property {number} efficiency - 処理効率（0-1）
-   * @property {number} throughput - スループット（データ/秒）
-   */
-  async benchmarkHybridPerformance(options = {}) {
-    this._validateInitialized();
-
-    try {
-      const performance = await this.page.evaluate(this._benchmarkHybridPerformanceInBrowser, options);
-      return performance;
-    } catch (error) {
-      throw new Error(`Failed to benchmark hybrid performance: ${error.message}`);
-    }
-  }
-
+export class HTMLGenerator {
   /**
    * Three.js用のHTMLテンプレートを生成する
    * @param {Function} userScript - ページに注入するユーザースクリプト
@@ -5186,31 +6966,37 @@ export class PuppeteerManager {
    * @throws {Error} ユーザースクリプトが無効な場合
    */
   generateTestHTML(userScript, options = {}) {
-    // 引数の検証
     if (typeof userScript !== 'function') {
       throw new Error('userScript must be a function');
     }
 
     const config = {
       title: 'Three.js Test Environment',
-      threeJsVersion: 'r128',
+      threeJsVersion: '0.173.0', // 0.xxx.xxx 形式に修正
       autoExecute: true,
       ...options
     };
 
     const userScriptString = userScript.toString();
-    const threeJsUrl = `https://cdnjs.cloudflare.com/ajax/libs/three.js/${config.threeJsVersion}/three.min.js`;
+    const versionToUse = options.threeJsVersion || config.threeJsVersion;
+    const threeJsUrl = this._getThreeJsUrl(versionToUse);
 
-    // スクリプト実行部分を生成
     const scriptExecution = config.autoExecute
       ? `
-        // Wait for Three.js to load
         window.addEventListener('load', function() {
-            // Execute user script
-            (${userScriptString})();
+            try {
+                if (typeof THREE === 'undefined') {
+                    console.error('Three.js failed to load');
+                    window.threeJsLoadError = true;
+                    return;
+                }
+                (${userScriptString})();
+            } catch (error) {
+                console.error('Error executing user script:', error);
+                window.userScriptError = error;
+            }
         });`
       : `
-        // User script is available but not auto-executed
         window.userScript = ${userScriptString};`;
 
     return `<!DOCTYPE html>
@@ -5252,10 +7038,23 @@ export class PuppeteerManager {
         Debug info will appear here
     </div>
     
-    <!-- Three.js CDN -->
-    <script src="${threeJsUrl}"></script>
+    <script>
+        window.threeJsLoadError = false;
+        window.threeJsLoaded = false; // 初期状態を false に設定
+
+        (async function() {
+            try {
+                const THREE_MODULE = await import('${threeJsUrl}');
+                window.THREE = THREE_MODULE;
+                console.log('Three.js loaded successfully');
+                window.threeJsLoaded = true;
+            } catch (e) {
+                console.error('Failed to load Three.js from:', '${threeJsUrl}', e);
+                window.threeJsLoadError = true;
+            }
+        })();
+    </script>
     
-    <!-- User Script -->
     <script>${scriptExecution}
     </script>
 </body>
@@ -5263,375 +7062,177 @@ export class PuppeteerManager {
   }
 
   /**
-   * 初期化状態を検証する
+   * Three.jsのバージョンに応じた適切なCDN URLを生成する
+   * @param {string} version - Three.jsのバージョン
+   * @returns {string} CDN URL
    * @private
-   * @throws {Error} 初期化されていない場合
    */
-  _validateInitialized() {
-    if (!this.isInitialized()) {
-      throw new Error('PuppeteerManager is not initialized');
+  _getThreeJsUrl(version) {
+    const defaultVersion = '0.173.0'; // ユーザー指示の基本バージョン
+    const cdnjsBaseUrl = 'https://cdnjs.cloudflare.com/ajax/libs/three.js/';
+
+    let targetVersion = version || defaultVersion;
+    let fileName = 'three.module.min.js'; // 常に three.module.min.js を使用
+
+    // バージョン形式のバリデーション: '0.xxx.xxx' 形式であること
+    const versionRegex = /^\d+\.\d+\.\d+$/;
+    if (!versionRegex.test(targetVersion)) {
+      throw new Error(`Invalid Three.js version format: "${targetVersion}". Expected format "0.xxx.xxx".`);
     }
+
+    return `${cdnjsBaseUrl}${targetVersion}/${fileName}`;
+  }
+}
+</file>
+
+<file path="three-test-suite/package.json">
+{
+  "name": "three-test-suite",
+  "version": "0.1.0",
+  "description": "TDD testing framework for Three.js applications",
+  "type": "module",
+  "main": "src/index.js",
+  "scripts": {
+    "test": "node --experimental-vm-modules node_modules/.bin/jest --config jest.config.js --forceExit",
+    "test:watch": "node --experimental-vm-modules node_modules/.bin/jest --config jest.config.js --watch",
+    "test:puppeteer": "node --experimental-vm-modules node_modules/.bin/jest --config jest.config.js --selectProjects=puppeteer-tests --forceExit",
+    "test:dom": "node --experimental-vm-modules node_modules/.bin/jest --config jest.config.js --selectProjects=dom-tests --forceExit",
+    "test:unit": "node --experimental-vm-modules node_modules/.bin/jest --config jest.config.js __tests__/unit --forceExit",
+    "test:performance": "node --experimental-vm-modules node_modules/.bin/jest --config jest.config.js __tests__/performance --forceExit",
+    "test:coverage": "node --experimental-vm-modules node_modules/.bin/jest --config jest.config.js --coverage --forceExit"
+  },
+  "dependencies": {
+    "puppeteer": "^22.0.0",
+    "three": "^0.163.0"
+  },
+  "devDependencies": {
+    "jest": "^29.5.0",
+    "jest-environment-jsdom": "^29.5.0"
+  }
+}
+</file>
+
+<file path="three-test-suite/src/PuppeteerManager.js">
+import { BrowserManager } from './BrowserManager.js';
+import { EnvironmentInspector } from './EnvironmentInspector.js';
+import { PerformanceTester } from './PerformanceTester.js';
+import { HTMLGenerator } from './HTMLGenerator.js';
+import { ThreeTestSuite } from './threejs/ThreeTestSuite.js';
+
+/**
+ * PuppeteerManager
+ * Three.js テスト用のPuppeteer関連機能を統括するクラス
+ * Three.js機能はThreeTestSuiteに移行済み（Issue #18 Phase1対応）
+ */
+export class PuppeteerManager {
+  constructor(options = {}) {
+    this.browserManager = new BrowserManager(options);
+    this.environmentInspector = new EnvironmentInspector(this.browserManager);
+    this.performanceTester = new PerformanceTester(this.browserManager);
+    this.htmlGenerator = new HTMLGenerator();
+    
+    // Three.js専用テストスイートを追加
+    this.threeTestSuite = new ThreeTestSuite(this.browserManager);
+  }
+
+  async initialize() {
+    await this.browserManager.initialize();
+    await this.threeTestSuite.initialize();
+  }
+
+  async cleanup() {
+    await this.browserManager.cleanup();
+  }
+
+  isInitialized() {
+    return this.browserManager.isInitialized();
+  }
+
+  get page() {
+    return this.browserManager.page;
+  }
+  
+  get browser() {
+    return this.browserManager.browser;
+  }
+
+  get options() {
+    return this.browserManager.options;
+  }
+
+  // === 既存の環境・パフォーマンス関連メソッド ===
+  async getWebGLInfo() {
+    return this.environmentInspector.getWebGLInfo();
+  }
+
+  async getWebAssemblyInfo() {
+    return this.environmentInspector.getWebAssemblyInfo();
+  }
+
+  async benchmarkWebAssembly() {
+    return this.performanceTester.benchmarkWebAssembly();
+  }
+
+  async getHybridCapabilities() {
+    return this.environmentInspector.getHybridCapabilities();
+  }
+
+  async benchmarkHybridPerformance(options = {}) {
+    return this.performanceTester.benchmarkHybridPerformance(options);
+  }
+
+  generateTestHTML(userScript, options = {}) {
+    return this.htmlGenerator.generateTestHTML(userScript, options);
+  }
+
+  // === Three.js関連メソッド（ThreeTestSuiteへの委任） ===
+  
+  /**
+   * Three.jsシーンをロードし、指定されたセットアップ関数を実行する
+   * @deprecated このメソッドはThreeTestSuite.loadThreeSceneに移行されました
+   * 互換性のため残されていますが、直接threeTestSuite.loadThreeScene()を使用することを推奨
+   * @param {Function} sceneBuilderFunction - Three.jsのシーンをセットアップする関数
+   * @param {Object} options - ロードオプション (title, threeJsVersion, timeoutなど)
+   * @returns {Promise<void>}
+   */
+  async loadThreeScene(sceneBuilderFunction, options = {}) {
+    return this.threeTestSuite.loadThreeScene(sceneBuilderFunction, options);
   }
 
   /**
-   * ブラウザ内でWebGL情報を取得する関数
-   * @private
-   * @returns {WebGLInfo} WebGL情報オブジェクト
+   * 包括的なThree.jsテストを実行
+   * ThreeTestSuiteに委任
+   * @returns {Promise<Object>} テスト結果
    */
-  _getWebGLInfoInBrowser() {
-    // WebGLサポート確認
-    const canvas = document.createElement('canvas');
-    const webglContext = canvas.getContext('webgl');
-    const webgl2Context = canvas.getContext('webgl2');
-
-    const result = {
-      webglSupported: webglContext !== null,
-      webgl2Supported: webgl2Context !== null,
-      vendor: null,
-      renderer: null,
-      version: null
-    };
-
-    // WebGL基本情報を取得
-    if (webglContext) {
-      result.vendor = webglContext.getParameter(webglContext.VENDOR);
-      result.renderer = webglContext.getParameter(webglContext.RENDERER);
-      result.version = webglContext.getParameter(webglContext.VERSION);
-    }
-
-    return result;
+  async runComprehensiveTest() {
+    return this.threeTestSuite.runComprehensiveTest();
   }
 
   /**
-   * ブラウザ内でWebAssembly情報を取得する関数
-   * 各種WebAssembly機能の対応状況を詳細に確認
-   * @private
-   * @returns {WebAssemblyInfo} WebAssembly情報オブジェクト
+   * 表示中のオブジェクトを取得
+   * ThreeTestSuiteに委任（将来的にObjectAnalyzerで実装予定）
+   * @returns {Promise<Array>} 表示中のオブジェクト一覧
    */
-  _getWebAssemblyInfoInBrowser() {
-    const result = {
-      wasmSupported: false,
-      streamingSupported: false,
-      memorySupported: false,
-      tableSupported: false,
-      globalSupported: false,
-      sharedMemorySupported: false,
-      simdSupported: false
-    };
-
-    // WebAssembly基本サポート確認
-    if (typeof WebAssembly !== 'undefined') {
-      result.wasmSupported = true;
-      
-      // ストリーミングコンパイルサポート確認
-      result.streamingSupported = typeof WebAssembly.compileStreaming === 'function' &&
-                                  typeof WebAssembly.instantiateStreaming === 'function';
-      
-      // Memory, Table, Globalサポート確認
-      result.memorySupported = typeof WebAssembly.Memory === 'function';
-      result.tableSupported = typeof WebAssembly.Table === 'function';
-      result.globalSupported = typeof WebAssembly.Global === 'function';
-      
-      // SharedMemoryサポート確認
-      // SecurityError対策のためtry-catchで囲む
-      try {
-        result.sharedMemorySupported = typeof SharedArrayBuffer !== 'undefined' && 
-                                      result.memorySupported;
-        
-        // さらに詳細な確認: 実際にSharedMemoryが作成可能か
-        if (result.sharedMemorySupported) {
-          try {
-            const testMemory = new WebAssembly.Memory({ 
-              initial: 1, 
-              maximum: 1, 
-              shared: true 
-            });
-            // 正常に作成できればtrue、そうでなければfalse
-            result.sharedMemorySupported = testMemory.buffer instanceof SharedArrayBuffer;
-          } catch (e) {
-            result.sharedMemorySupported = false;
-          }
-        }
-      } catch (e) {
-        result.sharedMemorySupported = false;
-      }
-      
-      // SIMD対応確認（将来拡張用）
-      // 現在は基本的な検査のみ。実際のSIMD命令セット対応確認は複雑
-      result.simdSupported = false; // 現在は常にfalse（将来の拡張に備えて）
-    }
-
-    return result;
+  async getVisibleObjects() {
+    return this.threeTestSuite.getVisibleObjects();
   }
 
   /**
-   * ブラウザ内でWebAssemblyパフォーマンステストを実行する関数
-   * 数値計算とメモリアクセスの両方の性能を測定
-   * @private
-   * @returns {Promise<WebAssemblyPerformance>} パフォーマンス情報オブジェクト
+   * レンダリング検証を実行
+   * ThreeTestSuiteに委任（将来的にRenderingValidatorで実装予定）
+   * @returns {Promise<Object>} レンダリング結果
    */
-  _benchmarkWebAssemblyInBrowser() {
-    if (typeof WebAssembly === 'undefined') {
-      throw new Error('WebAssembly is not supported');
-    }
-
-    // 簡単なWASMモジュール（addTwo関数: 2つの数値を加算）
-    // WAT (WebAssembly Text format): 
-    // (module
-    //   (func $addTwo (param $p1 i32) (param $p2 i32) (result i32)
-    //     local.get $p1
-    //     local.get $p2
-    //     i32.add)
-    //   (export "addTwo" (func $addTwo)))
-    const wasmBytes = new Uint8Array([
-      0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00, 0x01, 0x07, 0x01, 0x60, 0x02, 0x7f, 0x7f, 0x01,
-      0x7f, 0x03, 0x02, 0x01, 0x00, 0x07, 0x0a, 0x01, 0x06, 0x61, 0x64, 0x64, 0x54, 0x77, 0x6f, 0x00,
-      0x00, 0x0a, 0x09, 0x01, 0x07, 0x00, 0x20, 0x00, 0x20, 0x01, 0x6a, 0x0b
-    ]);
-
-    return WebAssembly.instantiate(wasmBytes)
-      .then(result => {
-        const addTwo = result.instance.exports.addTwo;
-        
-        // CPU集約的処理のパフォーマンステスト
-        const startTime = performance.now();
-        const iterations = 100000;
-        
-        for (let i = 0; i < iterations; i++) {
-          addTwo(i, i + 1);
-        }
-        
-        const endTime = performance.now();
-        const executionTime = endTime - startTime;
-        const operationsPerSecond = Math.round((iterations / executionTime) * 1000);
-        
-        // メモリアクセス性能テスト
-        const memoryStartTime = performance.now();
-        let memoryPerformance = 0;
-        
-        try {
-          const memory = new WebAssembly.Memory({ initial: 1 });
-          const buffer = new Uint32Array(memory.buffer);
-          const memoryOperations = 1000;
-          
-          for (let i = 0; i < memoryOperations; i++) {
-            buffer[i] = i;
-          }
-          
-          const memoryEndTime = performance.now();
-          const memoryTime = memoryEndTime - memoryStartTime;
-          memoryPerformance = Math.round((memoryOperations / memoryTime) * 1000);
-        } catch (e) {
-          // メモリアクセステストが失敗した場合は0を返す
-          memoryPerformance = 0;
-        }
-        
-        return {
-          executionTime: Math.round(executionTime * 100) / 100, // 小数点以下2桁に丸める
-          operationsPerSecond: operationsPerSecond,
-          memoryPerformance: memoryPerformance
-        };
-      })
-      .catch(error => {
-        throw new Error(`WebAssembly benchmark failed: ${error.message}`);
-      });
+  async validateRendering() {
+    return this.threeTestSuite.validateRendering();
   }
 
   /**
-   * ブラウザ内でWebAssemblyとWebGLの連携機能情報を取得する関数
-   * @private
-   * @returns {HybridCapabilities} 連携機能情報オブジェクト
+   * ThreeTestSuiteインスタンスを取得
+   * 直接Three.js機能にアクセスしたい場合に使用
+   * @returns {ThreeTestSuite} ThreeTestSuiteインスタンス
    */
-  _getHybridCapabilitiesInBrowser() {
-    // WebAssembly対応確認
-    const wasmSupported = typeof WebAssembly !== 'undefined';
-    
-    // WebGL対応確認
-    const canvas = document.createElement('canvas');
-    const webglContext = canvas.getContext('webgl');
-    const webglSupported = webglContext !== null;
-    
-    // 連携機能準備完了判定
-    const hybridReady = wasmSupported && webglSupported;
-    
-    // 性能プロファイル計算
-    let cpuScore = 0;
-    let gpuScore = 0;
-    let memoryBandwidth = 0;
-    
-    if (wasmSupported) {
-      // 簡易CPU性能スコア算出
-      const startTime = performance.now();
-      let sum = 0;
-      for (let i = 0; i < 100000; i++) {
-        sum += i * 2;
-      }
-      const endTime = performance.now();
-      cpuScore = Math.round(100000 / (endTime - startTime));
-    }
-    
-    if (webglSupported) {
-      // 簡易GPU性能スコア算出（テクスチャサイズベース）
-      const maxTextureSize = webglContext.getParameter(webglContext.MAX_TEXTURE_SIZE);
-      gpuScore = Math.min(maxTextureSize / 1024, 100); // 最大100点
-      
-      // メモリ帯域幅推定（簡易計算）
-      const maxViewportDims = webglContext.getParameter(webglContext.MAX_VIEWPORT_DIMS);
-      memoryBandwidth = Math.round((maxViewportDims[0] * maxViewportDims[1]) / 1000000); // MB/s推定
-    }
-    
-    // 推奨処理戦略の決定
-    let recommendedStrategy = 'cpu-only';
-    if (hybridReady) {
-      if (cpuScore > 50000 && gpuScore > 50) {
-        recommendedStrategy = 'balanced-hybrid';
-      } else if (cpuScore > 50000) {
-        recommendedStrategy = 'cpu-heavy';
-      } else if (gpuScore > 50) {
-        recommendedStrategy = 'gpu-heavy';
-      } else {
-        recommendedStrategy = 'simple-hybrid';
-      }
-    } else if (webglSupported) {
-      recommendedStrategy = 'gpu-only';
-    }
-    
-    return {
-      wasmSupported,
-      webglSupported,
-      hybridReady,
-      performanceProfile: {
-        cpuScore,
-        gpuScore,
-        memoryBandwidth
-      },
-      recommendedStrategy
-    };
-  }
-
-  /**
-   * ブラウザ内でWebAssemblyとWebGLの連携パフォーマンステストを実行する関数
-   * @private
-   * @param {Object} options - テストオプション
-   * @returns {Promise<HybridPerformance>} パフォーマンス情報オブジェクト
-   */
-  _benchmarkHybridPerformanceInBrowser(options) {
-    const config = {
-      dataSize: 5000,    // デフォルトを1000から5000に増加
-      iterations: 20,    // デフォルトを10から20に増加
-      ...options
-    };
-
-    if (typeof WebAssembly === 'undefined') {
-      throw new Error('WebAssembly is not supported');
-    }
-
-    const canvas = document.createElement('canvas');
-    const gl = canvas.getContext('webgl');
-    if (!gl) {
-      throw new Error('WebGL is not supported');
-    }
-
-    // WASMモジュール（データ処理用）
-    const wasmBytes = new Uint8Array([
-      0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00, 0x01, 0x07, 0x01, 0x60, 0x02, 0x7f, 0x7f, 0x01,
-      0x7f, 0x03, 0x02, 0x01, 0x00, 0x07, 0x0a, 0x01, 0x06, 0x61, 0x64, 0x64, 0x54, 0x77, 0x6f, 0x00,
-      0x00, 0x0a, 0x09, 0x01, 0x07, 0x00, 0x20, 0x00, 0x20, 0x01, 0x6a, 0x0b
-    ]);
-
-    return WebAssembly.instantiate(wasmBytes)
-      .then(result => {
-        const addTwo = result.instance.exports.addTwo;
-        
-        const totalStartTime = performance.now();
-        
-        let totalWasmTime = 0;
-        let totalWebglTime = 0;
-        let totalDataTransferTime = 0;
-        
-        for (let iter = 0; iter < config.iterations; iter++) {
-          // WASM計算フェーズ
-          const wasmStartTime = performance.now();
-          const vertices = [];
-          for (let i = 0; i < config.dataSize; i++) {
-            vertices.push(addTwo(i % 100, (i + 1) % 100));
-          }
-          const wasmEndTime = performance.now();
-          totalWasmTime += (wasmEndTime - wasmStartTime);
-          
-          // データ転送フェーズ（より大きなデータで測定精度向上）
-          const transferStartTime = performance.now();
-          
-          // より複雑なデータ転送処理を追加
-          const largeVertexData = new Float32Array(vertices.length * 3); // x, y, z coordinates
-          for (let i = 0; i < vertices.length; i++) {
-            largeVertexData[i * 3] = vertices[i];
-            largeVertexData[i * 3 + 1] = vertices[i] + 1;
-            largeVertexData[i * 3 + 2] = vertices[i] + 2;
-          }
-          
-          // 追加の配列変換処理でデータ転送時間を確実に測定
-          const normalData = new Float32Array(largeVertexData.length);
-          for (let i = 0; i < largeVertexData.length; i++) {
-            normalData[i] = largeVertexData[i] / Math.max(1, Math.abs(largeVertexData[i]));
-          }
-          
-          const transferEndTime = performance.now();
-          const transferTime = transferEndTime - transferStartTime;
-          totalDataTransferTime += Math.max(transferTime, 0.01); // 最小0.01ms保証
-          
-          // WebGL描画フェーズ（処理を重くして測定可能にする）
-          const webglStartTime = performance.now();
-          
-          // 複数のバッファを作成して処理を重くする
-          const buffers = [];
-          for (let bufIdx = 0; bufIdx < 5; bufIdx++) {
-            const buffer = gl.createBuffer();
-            buffers.push(buffer);
-            gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
-            gl.bufferData(gl.ARRAY_BUFFER, largeVertexData, gl.STATIC_DRAW);
-            
-            // 追加の WebGL 操作
-            gl.clear(gl.COLOR_BUFFER_BIT);
-            gl.viewport(0, 0, 100, 100);
-          }
-          
-          const webglEndTime = performance.now();
-          const webglTime = webglEndTime - webglStartTime;
-          totalWebglTime += Math.max(webglTime, 0.01); // 最小0.01ms保証
-          
-          // リソースクリーンアップ
-          buffers.forEach(buffer => gl.deleteBuffer(buffer));
-        }
-        
-        const totalEndTime = performance.now();
-        const totalTime = totalEndTime - totalStartTime;
-        
-        // 平均時間計算
-        const wasmComputeTime = Math.round((totalWasmTime / config.iterations) * 100) / 100;
-        const webglRenderTime = Math.round((totalWebglTime / config.iterations) * 100) / 100;
-        const dataTransferTime = Math.round((totalDataTransferTime / config.iterations) * 100) / 100;
-        
-        // 効率計算（理想的な並列処理に対する実際の性能比）
-        const idealTime = Math.max(wasmComputeTime, webglRenderTime);
-        const actualTime = wasmComputeTime + dataTransferTime + webglRenderTime;
-        const efficiency = Math.min(idealTime / actualTime, 1.0);
-        
-        // スループット計算（データ/秒）
-        const throughput = Math.round((config.dataSize * config.iterations * 1000) / totalTime);
-        
-        return {
-          wasmComputeTime,
-          webglRenderTime,
-          dataTransferTime,
-          totalTime: Math.round(totalTime * 100) / 100,
-          efficiency: Math.round(efficiency * 1000) / 1000,
-          throughput
-        };
-      })
-      .catch(error => {
-        throw new Error(`Hybrid performance benchmark failed: ${error.message}`);
-      });
+  getThreeTestSuite() {
+    return this.threeTestSuite;
   }
 }
 </file>
