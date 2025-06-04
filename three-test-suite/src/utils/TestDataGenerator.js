@@ -3,7 +3,7 @@
  * 再現可能なテストデータの生成とテスト間でのデータ汚染防止
  */
 
-class TestDataGenerator {
+export class TestDataGenerator {
   constructor(seed = 12345) {
     this.seed = seed;
     this.resetSeed();
@@ -618,7 +618,7 @@ class TestDataGenerator {
 /**
  * テストデータジェネレーターのファクトリー
  */
-class TestDataFactory {
+export class TestDataFactory {
   constructor() {
     this.generators = new Map();
     this.presets = new Map();
@@ -743,10 +743,7 @@ class TestDataFactory {
 }
 
 // シングルトンインスタンス
-const testDataFactory = new TestDataFactory();
+export const testDataFactory = new TestDataFactory();
 
-module.exports = {
-  TestDataGenerator,
-  TestDataFactory,
-  testDataFactory
-};
+// デフォルトエクスポート
+export default TestDataGenerator;
