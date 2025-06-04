@@ -1,8 +1,25 @@
 /**
- * WebGLコンテキストのモック実装
+ * @file WebGLコンテキストのモック実装
  * Three.jsテストでWebGL機能を完全にシミュレートし、テスト間の独立性を確保
  */
+
+/**
+ * @typedef {object} InternalMockCanvas
+ * @property {number} width
+ * @property {number} height
+ * @property {number} clientWidth
+ * @property {number} clientHeight
+ * @property {() => MockWebGLRenderingContext} getContext - このモックコンテキストのインスタンスを返します。
+ * @property {() => void} addEventListener
+ * @property {() => void} removeEventListener
+ */
 class MockWebGLRenderingContext {
+  /** @type {InternalMockCanvas} */
+  canvas;
+
+  /**
+   * @param {InternalMockCanvas} [canvas] - オプションのキャンバスオブジェクト。
+   */
   constructor(canvas) {
     this.canvas = canvas || this.createMockCanvas();
     this.programs = new Map();
@@ -115,6 +132,7 @@ class MockWebGLRenderingContext {
 
   /**
    * モックCanvasの作成
+   * @returns {InternalMockCanvas}
    */
   createMockCanvas() {
     return {
