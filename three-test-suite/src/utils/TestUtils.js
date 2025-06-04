@@ -24,7 +24,9 @@ export class TestUtils {
           'animationResult', 'shaderTest', 'modelLoaded', 'performanceResults',
           'heavyProcessComplete', 'webglInfo', 'customSceneLoaded',
           'legacyTestComplete', 'sceneObjects', 'sceneAnalysis',
-          'userScript', 'scene', 'camera', 'renderer'
+          'userScript', 'scene', 'camera', 'renderer', 'testProperty',
+          'testCondition', 'testComplete', 'integrationTestComplete',
+          'multiComponentTest', 'testScene', 'sceneBuilt'
         ];
 
         testProperties.forEach(prop => {
@@ -334,11 +336,15 @@ export class TestPatterns {
     const testEnv = await TestUtils.setupTest(options);
     
     try {
+      // HTMLGeneratorを使用してThree.js環境を構築
+      const { HTMLGenerator } = await import('../HTMLGenerator.js');
+      const htmlGenerator = new HTMLGenerator();
+      
+      const html = htmlGenerator.generateTestHTML(sceneBuilder);
+      await testEnv.page.setContent(html);
+      
       // Three.jsの準備を確認
       await TestUtils.ensureThreeJsReady(testEnv.page);
-      
-      // シーンを構築
-      await testEnv.page.evaluate(sceneBuilder);
       
       // テストを実行
       await testFunction(testEnv.browserManager, testEnv.page);
