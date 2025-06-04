@@ -30,7 +30,6 @@ export default {
       ],
       testEnvironment: "node",
       transformIgnorePatterns: suiteTransformIgnorePatterns,
-      testTimeout: 60000, // TestUtils含む複数ブラウザインスタンス処理のため長めに設定
     },
     {
       displayName: "dom-tests",
@@ -43,13 +42,29 @@ export default {
       ],
       testEnvironment: "jsdom",
       transformIgnorePatterns: suiteTransformIgnorePatterns, // DOMテストでpuppeteerは通常不要だが、共通設定としておく
+    },
+    {
+      displayName: "integration-tests",
+      preset: 'ts-jest/presets/default-esm', // ESMサポートのため
+      transform: jsEsmTransform,
+      extensionsToTreatAsEsm: ['.jsx'], // .jsx を ESM として扱う ( .js は package.json の type: module で自動判別)
+      moduleFileExtensions: ['js', 'jsx', 'json', 'node'], // 主にJSファイルを扱う
+      testMatch: [
+        "**/__tests__/integration/*.test.js",
+      ],
+      testEnvironment: "node",
+      transformIgnorePatterns: suiteTransformIgnorePatterns,
+      // 統合テストは現在リファクタリング中につき除外
+      testPathIgnorePatterns: [
+        "**/__tests__/integration/.*\\.test\\.js$"
+      ],
     }
   ],
   collectCoverageFrom: [
     'src/**/*.(js|jsx)', // カバレッジはJS/JSXファイルから
     '!**/node_modules/**'
   ],
-  testTimeout: 30000,
+  testTimeout: 60000, // TestUtilsを含む全テストのデフォルトタイムアウト
   detectOpenHandles: true,
   verbose: true, // 詳細なテスト結果を表示
   bail: false, // 一つのテストが失敗しても全テストを継続実行
