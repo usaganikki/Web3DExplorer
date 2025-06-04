@@ -83,13 +83,14 @@ describe('MockBrowserManager - 基本機能', () => {
     await mockBrowserManager.initialize();
     
     expect(mockBrowserManager.isInitialized).toBe(true);
-    expect(MockBrowserManager.getActiveInstanceCount()).toBeGreaterThan(0);
+    expect(MockBrowserManager.getActiveInstanceCount()).toBe(1);
     
     await mockBrowserManager.cleanup();
     
     expect(mockBrowserManager.isInitialized).toBe(false);
     expect(mockBrowserManager.browser).toBeNull();
     expect(mockBrowserManager.page).toBeNull();
+    expect(MockBrowserManager.getActiveInstanceCount()).toBe(0);
   });
 
   test('オプション設定が正しく適用される', () => {
@@ -223,7 +224,8 @@ describe('MockBrowserManager - モックページ機能', () => {
   });
 
   test('page.on()でイベントリスナーが設定できる', () => {
-    const handler = jest.fn();
+    // jest.fn()の代わりに単純なmock関数を使用
+    const handler = () => { /* mock handler */ };
     
     mockBrowserManager.page.on('console', handler);
     
