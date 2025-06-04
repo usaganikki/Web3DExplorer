@@ -13,7 +13,6 @@ class MockBrowserManager {
     this.browser = null;
     this.page = null;
     this.isInitialized = false;
-    this.instances = new Set(); // アクティブなインスタンス追跡
   }
 
   /**
@@ -32,7 +31,7 @@ class MockBrowserManager {
     this.page = this.createMockPage();
     
     this.isInitialized = true;
-    this.instances.add(this);
+    MockBrowserManager.instances.add(this);
     
     return this;
   }
@@ -45,7 +44,7 @@ class MockBrowserManager {
       newPage: async () => this.createMockPage(),
       close: async () => {
         this.isInitialized = false;
-        this.instances.delete(this);
+        MockBrowserManager.instances.delete(this);
       },
       isConnected: () => this.isInitialized,
       pages: async () => [this.page].filter(Boolean),
@@ -193,10 +192,15 @@ class MockBrowserManager {
     
     if (fnString.includes('window.')) {
       // window オブジェクトへのアクセスをシミュレート
-      const match = fnString.match(/window\.(\w+)/);
+      const match = fnString.match(/window\.([\w.]+)/);
       if (match) {
         return this.getGlobalProperty(match[1]);
       }
+    }
+
+    // falseを返す関数の場合の判定を追加
+    if (fnString.includes('() => false')) {
+      return false;
     }
     
     // デフォルトの戻り値
@@ -366,7 +370,9 @@ class MockBrowserManager {
     }
     
     this.isInitialized = false;
-    this.instances.delete(this);
+    this.page = null;
+    this.browser = null;
+    MockBrowserManager.instances.delete(this);
     this._globalProperties = {};
   }
 
