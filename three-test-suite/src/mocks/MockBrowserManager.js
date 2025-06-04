@@ -199,7 +199,7 @@ class MockBrowserManager {
     }
 
     // falseを返す関数の場合の判定を追加
-    if (fnString.includes('() => false')) {
+    if (fnString.includes('() => false') || fnString.includes('function() { return false; }')) {
       return false;
     }
     
