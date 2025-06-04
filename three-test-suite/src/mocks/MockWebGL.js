@@ -745,7 +745,7 @@ function initializeTestMocks() {
   }
 }
 
-module.exports = {
+export {
   MockWebGLRenderingContext,
   MockWebAssembly,
   MockWebAssemblyModule,
