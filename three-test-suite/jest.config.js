@@ -14,6 +14,24 @@ const suiteTransformIgnorePatterns = [
 export default {
   projects: [
     {
+      displayName: "test-utils",
+      preset: 'ts-jest/presets/default-esm', // ESMサポートのため
+      transform: jsEsmTransform,
+      extensionsToTreatAsEsm: ['.jsx'], // .jsx を ESM として扱う ( .js は package.json の type: module で自動判別)
+      moduleFileExtensions: ['js', 'jsx', 'json', 'node'], // 主にJSファイルを扱う
+      testMatch: [
+        "**/__tests__/unit/*TestUtils*.test.js",
+      ],
+      testEnvironment: "node",
+      transformIgnorePatterns: suiteTransformIgnorePatterns,
+      testTimeout: 60000, // TestUtilsは複数ブラウザインスタンスを使うため長めに設定
+      setupFilesAfterEnv: [], // 必要に応じて追加
+      // TestUtils専用の設定
+      maxConcurrency: 1, // TestUtilsテストは並列実行を制限
+      detectOpenHandles: true,
+      forceExit: false, // TestUtilsのクリーンアップを確実に実行
+    },
+    {
       displayName: "puppeteer-tests",
       preset: 'ts-jest/presets/default-esm', // ESMサポートのため
       transform: jsEsmTransform,
@@ -49,4 +67,7 @@ export default {
   ],
   testTimeout: 30000,
   detectOpenHandles: true,
+  // TestUtils関連の追加設定
+  verbose: true, // TestUtilsの詳細なテスト結果を表示
+  bail: false, // 一つのテストが失敗しても全テストを継続実行
 };
