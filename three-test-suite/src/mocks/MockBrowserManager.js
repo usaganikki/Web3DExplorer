@@ -398,4 +398,4 @@ class MockBrowserManager {
 // 静的プロパティの初期化
 MockBrowserManager.instances = new Set();
 
-module.exports = MockBrowserManager;
+export default MockBrowserManager;
