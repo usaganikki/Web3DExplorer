@@ -277,11 +277,12 @@ describe('TestDataGenerator', () => {
       const idAfterRestore = generator.generateUniqueId('abc'); // Should be abc-2
       const randomAfterRestore = generator.randomFloat();
 
+      // Generate expected values by recreating the same state
       const generatorCompare = new TestDataGenerator(777);
       generatorCompare.generateUniqueId('abc'); // abc-1
-      const expectedRandomAfterRestore = generatorCompare.randomFloat(); // First random after abc-1
+      generatorCompare.randomFloat(); // Execute the same randomFloat() to match the saved state
       const expectedIdAfterRestore = generatorCompare.generateUniqueId('abc'); // abc-2
-
+      const expectedRandomAfterRestore = generatorCompare.randomFloat(); // Next randomFloat() from the same state
 
       expect(idAfterRestore).toBe(expectedIdAfterRestore);
       expect(randomAfterRestore).toBe(expectedRandomAfterRestore);
