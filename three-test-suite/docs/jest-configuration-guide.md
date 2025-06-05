@@ -577,6 +577,78 @@ test('should create valid scene', () => {
 });
 ```
 
+#### 7. ES Modules 環境でのモック設定
+
+**問題**: ES Modules (ESM) 環境下（例: `package.json` で `"type": "module"` を指定し、テスト実行時に `node --experimental-vm-modules` フラグを使用）では、Jest の標準的なモック機能（`jest.mock` の Hoisting や `__mocks__` ディレクトリによる自動モック）が期待通りに動作しない場合があります。
+
+**解決策**: `jest.unstable_mockModule` API と動的インポート、および適切な Jest 設定を組み合わせることで対応できます。
+
+**設定例 (`jest.config.js`):**
+```javascript
+// jest.config.js
+export default {
+  // ... (既存の preset や transform 設定) ...
+  globals: {
+    'ts-jest': { // ts-jest を使用している場合
+      useESM: true,
+      isolatedModules: true // モックの安定性に寄与する可能性
+    }
+  },
+  moduleNameMapper: {
+    // ESM環境で拡張子なしのインポートを解決する場合など
+    '^(\\.{1,2}/.*)\\.js$': '$1',
+  }
+  // ...
+};
+```
+
+**テストファイルでの実装例 (`*.test.js`):**
+```javascript
+// *.test.js
+import { jest } from '@jest/globals';
+// import OriginalModule from '../src/original-module'; // 通常の静的インポートは避ける
+
+let OriginalModule; // モックされたモジュールを格納する変数
+let instanceOfOriginalModule;
+
+beforeAll(async () => {
+  // jest.unstable_mockModule でモジュールをモック
+  const mocked = await jest.unstable_mockModule('../src/original-module', () => ({
+    // OriginalModule がクラスの場合のコンストラクタモック
+    OriginalModule: jest.fn().mockImplementation(() => ({
+      someMethod: jest.fn().mockReturnValue('mocked value'),
+      // ...その他の必要なメソッドをモック...
+    })),
+    // OriginalModule が関数やオブジェクトをエクスポートしている場合は適宜調整
+    //例: namedExportFunction: jest.fn(),
+    //    default: jest.fn(), // default export の場合
+  }));
+  OriginalModule = mocked.OriginalModule;
+});
+
+describe('MyComponent using OriginalModule', () => {
+  beforeEach(() => {
+    // 各テストの前にすべてのモックをクリア
+    jest.clearAllMocks();
+    // モックされたコンストラクタからインスタンスを生成
+    instanceOfOriginalModule = new OriginalModule();
+  });
+
+  test('should use mocked OriginalModule', () => {
+    // テスト対象コードが instanceOfOriginalModule.someMethod() を呼び出すと仮定
+    // const result = myComponent.doSomethingWithOriginalModule(instanceOfOriginalModule);
+    // expect(instanceOfOriginalModule.someMethod).toHaveBeenCalled();
+    // expect(result).toBe('expected result based on mocked value');
+  });
+});
+```
+**ポイント**:
+*   `jest.unstable_mockModule` は `beforeAll` などの非同期スコープ内で `await` を使って呼び出します。
+*   モックしたいモジュールと、それを使用するテスト対象のモジュールは、`jest.unstable_mockModule` の呼び出し後に動的インポート (`await import(...)`) するか、`beforeAll` で設定された変数を介して参照します。
+*   `jest.config.js` の `globals['ts-jest'].isolatedModules: true` 設定が、このアプローチの安定動作に役立つことがあります。
+
+この方法により、ESM 環境でも依存モジュールを効果的にモックし、単体テストの分離性を保つことができます。
+
 ## パフォーマンス最適化
 
 ### ⚡ 実行速度の改善

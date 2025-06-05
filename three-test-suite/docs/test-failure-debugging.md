@@ -186,6 +186,47 @@ SyntaxError: Cannot use import statement outside a module
    ]
    ```
 
+#### ES Modules 環境でのモック失敗
+```
+// 例: jest.mock が効かず、元のモジュールがインポートされてしまう
+// 例: __mocks__ ディレクトリのモックが自動的に使用されない
+// 例: TypeError: OriginalModule.mockClear is not a function (モックされていないため)
+// 例: TypeError: Cannot read properties of undefined (reading 'mockImplementation') (モック関数になっていない)
+```
+**原因**: ES Modules (ESM) 環境下（`package.json` で `"type": "module"`、テスト実行時に `node --experimental-vm-modules` フラグ使用など）では、Jest の標準的なモック機能（`jest.mock` の Hoisting や `__mocks__` ディレクトリ）が期待通りに動作しないことがあります。
+
+**対処法**:
+1. **`jest.unstable_mockModule` API の使用**:
+   - ESM 環境向けに提供されている `jest.unstable_mockModule` を使用してモジュールを明示的にモックします。
+   - モックしたいモジュールと、それを使用するテスト対象のモジュールは、`beforeAll` フックなどで `await jest.unstable_mockModule(...)` を呼び出した後に、動的インポート (`await import(...)`) を使用して読み込みます。
+   ```javascript
+   // test-file.test.js
+   import { jest } from '@jest/globals';
+   let MyDependency; // モックされる依存関係
+   let MyModule;     // テスト対象
+
+   beforeAll(async () => {
+     const mocked = await jest.unstable_mockModule('../src/my-dependency', () => ({
+       MyDependency: jest.fn().mockImplementation(() => ({
+         someMethod: jest.fn(),
+       })),
+     }));
+     MyDependency = mocked.MyDependency;
+
+     const originalModule = await import('../src/my-module');
+     MyModule = originalModule.MyModule;
+   });
+   // ...テストスイート...
+   ```
+
+2. **Jest 設定 (`jest.config.js`) の確認と調整**:
+   - `globals['ts-jest'].isolatedModules: true` (ts-jest を使用している場合): この設定がモックの安定性に寄与することがあります。
+   - `moduleNameMapper`: ESM 環境での拡張子なしインポートなどを正しく解決するために設定が必要な場合があります。
+   - 詳細な設定例は、[Jest設定詳細ガイド](./jest-configuration-guide.md#7-es-modules-環境でのモック設定) を参照してください。
+
+3. **`babel-plugin-jest-hoist` の利用検討 (Babel を使用している場合)**:
+   - もしプロジェクトで Babel をトランスパイラとして使用している場合、`babel-plugin-jest-hoist` プラグインを導入することで、`jest.mock` の巻き上げが期待通りに機能するようになることがあります。この場合、`.js` ファイルのトランスフォーム設定を `babel-jest` に変更する必要があります。
+
 ### 🚨 Three.js関連エラー
 
 #### WebGL context lost

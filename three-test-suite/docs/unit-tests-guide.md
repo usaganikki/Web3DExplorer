@@ -319,6 +319,66 @@ describe('新機能テスト', () => {
 - **再現性**: 同じ結果を常に得られる
 - **効率性**: 不要な処理を避ける
 
+### ES Modules 環境でのモック
+
+プロジェクトで ES Modules (ESM) を使用している場合（例: `package.json` で `"type": "module"` を指定）、Jest で依存モジュールをモックする際に注意が必要です。標準的な `jest.mock` の Hoisting (巻き上げ) が期待通りに機能しないことがあります。
+
+このような場合は、`jest.unstable_mockModule` API と動的インポート (`await import(...)`) を組み合わせることで、ESM 環境でも効果的にモックを行うことができます。
+
+**基本的なアプローチ例:**
+
+```javascript
+// my-module.test.js
+import { jest } from '@jest/globals';
+// import Dependency from '../src/dependency'; // 通常の静的インポートは避ける
+// import MyModule from '../src/my-module';   // テスト対象も動的インポート
+
+let Dependency; // モックされた依存モジュール
+let MyModule;   // テスト対象モジュール
+
+beforeAll(async () => {
+  // 依存モジュールをモック
+  const mockedDependency = await jest.unstable_mockModule('../src/dependency', () => ({
+    // クラスの場合
+    Dependency: jest.fn().mockImplementation(() => ({
+      someMethod: jest.fn().mockReturnValue('mocked data'),
+    })),
+    // default エクスポートの場合
+    // default: jest.fn().mockReturnValue('mocked default export'),
+    // 名前付きエクスポートの場合
+    // namedFunction: jest.fn(),
+  }));
+  Dependency = mockedDependency.Dependency; // または mockedDependency.default など
+
+  // テスト対象モジュールを動的インポート
+  const myModuleImport = await import('../src/my-module');
+  MyModule = myModuleImport.MyModule; // または myModuleImport.default
+});
+
+describe('MyModule', () => {
+  let dependencyInstance;
+  let myModuleInstance;
+
+  beforeEach(() => {
+    jest.clearAllMocks(); // モックをクリア
+    dependencyInstance = new Dependency();
+    myModuleInstance = new MyModule(dependencyInstance);
+  });
+
+  test('should use mocked dependency', () => {
+    // ... テストロジック ...
+    // expect(dependencyInstance.someMethod).toHaveBeenCalled();
+  });
+});
+```
+
+**重要なポイント:**
+
+*   モック対象のモジュールと、それを利用するテスト対象のモジュールは、`beforeAll` 内で `jest.unstable_mockModule` を使ってモックを設定した後に、`await import(...)` で動的にインポートします。
+*   Jest の設定 (`jest.config.js`) で `globals['ts-jest'].isolatedModules: true` (ts-jest を使用している場合) や `moduleNameMapper` を適切に設定することが、このアプローチの安定動作に繋がることがあります。
+
+詳細な設定や背景については、[Jest設定詳細ガイド](./jest-configuration-guide.md#7-es-modules-環境でのモック設定) も参照してください。
+
 ## 🔗 関連ドキュメント
 
 - [テスト構造概要](./test-structure.md) - テスト全体の構造理解

@@ -11,49 +11,64 @@ const suiteTransformIgnorePatterns = [
   'node_modules/(?!(puppeteer)/)' // puppeteer は ESM なのでトランスパイル対象から除外しない
 ];
 
+// ES Modules環境でのモジュール解決設定
+const esmModuleNameMapping = {
+  // 相対パスの.js拡張子を適切に解決
+  '^(\\.{1,2}/.*)\\.js$': '$1',
+  // 必要に応じて他の拡張子も追加
+  '^(\\.{1,2}/.*)\\.jsx$': '$1'
+};
+
+// 共通のESM設定
+const commonEsmConfig = {
+  preset: 'ts-jest/presets/default-esm', // ESMサポートのため
+  transform: jsEsmTransform,
+  extensionsToTreatAsEsm: ['.jsx'], 
+  moduleFileExtensions: ['js', 'jsx', 'json', 'node'],
+  moduleNameMapper: esmModuleNameMapping, // ES Modules拡張子解決
+  transformIgnorePatterns: suiteTransformIgnorePatterns,
+  // jest.unstable_mockModule使用時の設定
+  globals: {
+    'ts-jest': {
+      useESM: true,
+      isolatedModules: true // パフォーマンス向上とモック安定性
+    }
+  }
+};
+
 export default {
   projects: [
     {
       displayName: "puppeteer-tests",
-      preset: 'ts-jest/presets/default-esm', // ESMサポートのため
-      transform: jsEsmTransform,
-      extensionsToTreatAsEsm: ['.jsx'], // .jsx を ESM として扱う ( .js は package.json の type: module で自動判別)
-      moduleFileExtensions: ['js', 'jsx', 'json', 'node'], // 主にJSファイルを扱う
+      ...commonEsmConfig,
       testMatch: [
         "**/__tests__/unit/*PuppeteerManager*.test.js",
         "**/__tests__/unit/*BrowserManager*.test.js",
         "**/__tests__/unit/*TestUtils*.test.js",
         "**/__tests__/unit/*EnvironmentInspector*.test.js",
-        "**/__tests__/performance/*PerformanceTester*.test.js",
+        "**/__tests__/unit/*PerformanceTester*.test.js",
         "**/__tests__/unit/*ThreeTestSuite*.test.js",
         "**/__tests__/unit/*SceneInspector*.test.js"
       ],
       testEnvironment: "node",
-      transformIgnorePatterns: suiteTransformIgnorePatterns,
     },
     {
       displayName: "dom-tests",
-      preset: 'ts-jest/presets/default-esm', // ESMサポートのため
-      transform: jsEsmTransform,
-      extensionsToTreatAsEsm: ['.jsx'], // .jsx を ESM として扱う ( .js は package.json の type: module で自動判別)
-      moduleFileExtensions: ['js', 'jsx', 'json', 'node'], // 主にJSファイルを扱う
+      ...commonEsmConfig,
       testMatch: [
         "**/__tests__/unit/*HTMLGenerator*.test.js",
       ],
       testEnvironment: "jsdom",
-      transformIgnorePatterns: suiteTransformIgnorePatterns, // DOMテストでpuppeteerは通常不要だが、共通設定としておく
+      // jsdom環境用の追加設定
+      setupFilesAfterEnv: [], // 必要に応じてsetupファイルを追加
     },
     {
       displayName: "integration-tests",
-      preset: 'ts-jest/presets/default-esm', // ESMサポートのため
-      transform: jsEsmTransform,
-      extensionsToTreatAsEsm: ['.jsx'], // .jsx を ESM として扱う ( .js は package.json の type: module で自動判別)
-      moduleFileExtensions: ['js', 'jsx', 'json', 'node'], // 主にJSファイルを扱う
+      ...commonEsmConfig,
       testMatch: [
         "**/__tests__/integration/*.test.js",
       ],
       testEnvironment: "node",
-      transformIgnorePatterns: suiteTransformIgnorePatterns,
       // 統合テストは現在リファクタリング中につき除外
       // testPathIgnorePatterns: [  // ← この行をコメントアウト
       //   "**/__tests__/integration/.*\\.test\\.js$" // ← この行もコメントアウト
@@ -68,4 +83,17 @@ export default {
   detectOpenHandles: true,
   verbose: true, // 詳細なテスト結果を表示
   bail: false, // 一つのテストが失敗しても全テストを継続実行
+  
+  // ES Modules環境での追加設定
+  preset: 'ts-jest/presets/default-esm',
+  extensionsToTreatAsEsm: ['.jsx'],
+  moduleNameMapper: esmModuleNameMapping,
+  
+  // グローバル設定
+  globals: {
+    'ts-jest': {
+      useESM: true,
+      isolatedModules: true
+    }
+  }
 };
