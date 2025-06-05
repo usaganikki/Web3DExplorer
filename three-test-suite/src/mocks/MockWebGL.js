@@ -128,6 +128,7 @@ class MockWebGLRenderingContext {
     this.BLEND = 3042;
     this.DEPTH_TEST = 2929;
     this.CULL_FACE = 2884;
+    this.MAX_VERTEX_ATTRIBS = 34921; // 追加
   }
 
   /**
@@ -456,10 +457,10 @@ class MockWebGLRenderingContext {
       case 3379:
         return 4096;
       case this.MAX_RENDERBUFFER_SIZE:
-      case 34024:
+      case 34024: // MAX_RENDERBUFFER_SIZE (エイリアス)
         return 4096;
-      case this.MAX_VERTEX_ATTRIBS:
-      case 34921:
+      case this.MAX_VERTEX_ATTRIBS: // 定義された定数を使用
+      case 34921: // MAX_VERTEX_ATTRIBS (値)
         return 16;
       default:
         return null;
