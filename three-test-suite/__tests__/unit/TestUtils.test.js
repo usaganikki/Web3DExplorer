@@ -88,8 +88,8 @@ describe('TestUtils - 基本機能テスト', () => {
         cubeRendered: window.cubeRendered
       }));
 
-      // MockBrowserManagerでは基本的にtrueを返す
-      expect(beforeReset.testProperty).toBe(true);
+      // MockBrowserManagerでプロパティが正しく設定されていることを確認
+      expect(beforeReset.testProperty).toBe('test value');
       expect(beforeReset.sceneReady).toBe(true);
       expect(beforeReset.cubeRendered).toBe(true);
 
@@ -103,10 +103,10 @@ describe('TestUtils - 基本機能テスト', () => {
         cubeRendered: window.cubeRendered
       }));
 
-      // MockBrowserManagerではリセット後も基本的にtrueを返す
-      expect(afterReset.testProperty).toBe(true);
-      expect(afterReset.sceneReady).toBe(true);
-      expect(afterReset.cubeRendered).toBe(true);
+      // リセット後はundefinedになる
+      expect(afterReset.testProperty).toBeUndefined();
+      expect(afterReset.sceneReady).toBeUndefined();
+      expect(afterReset.cubeRendered).toBeUndefined();
     });
 
     test('pageオブジェクトが無効な場合はエラーを投げる', async () => {
@@ -197,10 +197,8 @@ describe('TestUtils - 基本機能テスト', () => {
     });
 
     test('条件が満たされるまで待機する', async () => {
-      // MockBrowserManagerでは即座に条件が満たされる
-      await browserManager.page.evaluate(() => {
-        window.testCondition = true;
-      });
+      // MockBrowserManagerでプロパティを設定
+      browserManager.setGlobalProperty('testCondition', true);
 
       await TestUtils.waitForCondition(
         browserManager.page,
@@ -213,18 +211,21 @@ describe('TestUtils - 基本機能テスト', () => {
     });
 
     test('タイムアウト時にエラーを投げる', async () => {
-      // MockBrowserManagerでfalseを返すケースをテスト
+      // 条件が満たされないケースをテスト
       await expect(
         TestUtils.waitForCondition(
           browserManager.page,
-          () => false, // 常にfalseを返す条件
-          { timeout: 200, retries: 1 }
+          '() => false', // 常にfalseを返す条件
+          { timeout: 300, retries: 2 }
         )
       ).rejects.toThrow('Condition not met within timeout');
     });
 
     test('MockBrowserManagerでの高速条件チェック', async () => {
       const startTime = Date.now();
+      
+      // あらかじめ条件を満たすプロパティを設定
+      browserManager.setGlobalProperty('testCondition', true);
       
       await TestUtils.waitForCondition(
         browserManager.page,
@@ -419,7 +420,10 @@ describe('TestUtils統合テスト', () => {
       window.testId = 'test1';
       window.uniqueValue = Math.random();
     });
-    const test1Value = await testEnv1.page.evaluate(() => window.uniqueValue);
+    
+    // プロパティを直接設定してテスト
+    testEnv1.browserManager.setGlobalProperty('testId', 'test1');
+    testEnv1.browserManager.setGlobalProperty('uniqueValue', 0.123);
 
     // 2番目のテスト環境（独立）
     const testEnv2 = await TestUtils.setupTest();
@@ -427,18 +431,21 @@ describe('TestUtils統合テスト', () => {
       window.testId = 'test2';
       window.uniqueValue = Math.random();
     });
-    const test2Value = await testEnv2.page.evaluate(() => window.uniqueValue);
+    
+    // プロパティを直接設定してテスト
+    testEnv2.browserManager.setGlobalProperty('testId', 'test2');
+    testEnv2.browserManager.setGlobalProperty('uniqueValue', 0.456);
 
-    // MockBrowserManagerでは基本的にtrueを返すが、インスタンスは独立
+    // インスタンスは独立していることを確認
     expect(testEnv1.browserManager).not.toBe(testEnv2.browserManager);
     expect(testEnv1.page).not.toBe(testEnv2.page);
 
-    const test1Id = await testEnv1.page.evaluate(() => window.testId);
-    const test2Id = await testEnv2.page.evaluate(() => window.testId);
+    // MockBrowserManagerで設定した値が正しく取得できることを確認
+    const test1Id = TestUtils.getMockGlobalProperty(testEnv1.browserManager, 'testId');
+    const test2Id = TestUtils.getMockGlobalProperty(testEnv2.browserManager, 'testId');
 
-    // MockBrowserManagerでは基本的にtrueを返すが、設定は反映される
-    expect(test1Id).toBe(true); // MockBrowserManagerの動作
-    expect(test2Id).toBe(true); // MockBrowserManagerの動作
+    expect(test1Id).toBe('test1');
+    expect(test2Id).toBe('test2');
 
     // クリーンアップ
     await TestUtils.cleanupTest(testEnv1);
