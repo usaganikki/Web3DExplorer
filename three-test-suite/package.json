@@ -9,6 +9,7 @@
     "test:watch": "node --experimental-vm-modules node_modules/.bin/jest --config jest.config.js --watch",
     "test:puppeteer": "node --experimental-vm-modules node_modules/.bin/jest --config jest.config.js --selectProjects=puppeteer-tests --forceExit",
     "test:dom": "node --experimental-vm-modules node_modules/.bin/jest --config jest.config.js --selectProjects=dom-tests --forceExit",
+    "test:integration": "node --experimental-vm-modules node_modules/.bin/jest --config jest.config.js --selectProjects=integration-tests --forceExit",
     "test:unit": "node --experimental-vm-modules node_modules/.bin/jest --config jest.config.js __tests__/unit --forceExit",
     "test:performance": "node --experimental-vm-modules node_modules/.bin/jest --config jest.config.js __tests__/performance --forceExit",
     "test:coverage": "node --experimental-vm-modules node_modules/.bin/jest --config jest.config.js --coverage --forceExit"

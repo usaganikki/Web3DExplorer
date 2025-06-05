@@ -50,7 +50,7 @@ describe('BrowserManager - 基本機能', () => {
     const manager = new BrowserManager();
     await manager.initialize();
     await manager.initialize(); // 二回目の初期化
-    
+
     expect(manager.browser).toBeDefined();
     await manager.cleanup();
   });
