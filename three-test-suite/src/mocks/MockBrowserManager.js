@@ -13,6 +13,7 @@ class MockBrowserManager {
     this.browser = null;
     this.page = null;
     this.isInitialized = false;
+    this._globalProperties = {}; // インスタンス作成時に初期化
   }
 
   /**
@@ -87,6 +88,7 @@ class MockBrowserManager {
       // 待機関数
       waitForFunction: async (fn, options = {}) => {
         const timeout = options.timeout || 30000;
+        const interval = options.polling || 100;
         const startTime = Date.now();
         
         while (Date.now() - startTime < timeout) {
@@ -96,7 +98,7 @@ class MockBrowserManager {
           } catch (e) {
             // 評価エラーは無視
           }
-          await this.delay(100);
+          await this.delay(interval);
         }
         throw new Error(`waitForFunction timeout after ${timeout}ms`);
       },
@@ -136,6 +138,11 @@ class MockBrowserManager {
         }
       },
       
+      // タイムアウト設定
+      setDefaultTimeout: async (timeout) => {
+        mockPage._defaultTimeout = timeout;
+      },
+      
       // クリーンアップ
       close: async () => {
         mockPage._closed = true;
@@ -148,7 +155,8 @@ class MockBrowserManager {
       _currentUrl: '',
       _viewport: null,
       _closed: false,
-      _listeners: {}
+      _listeners: {},
+      _defaultTimeout: 30000
     };
     
     return mockPage;
@@ -181,29 +189,99 @@ class MockBrowserManager {
     // 関数の文字列化と解析
     const fnString = fn.toString();
     
-    // Three.jsオブジェクトの作成をシミュレート
-    if (fnString.includes('new THREE.Scene')) {
-      return { type: 'Scene', children: [] };
-    }
-    
-    if (fnString.includes('new THREE.Mesh')) {
-      return { type: 'Mesh', geometry: {}, material: {} };
-    }
-    
-    if (fnString.includes('window.')) {
-      // window オブジェクトへのアクセスをシミュレート
-      const match = fnString.match(/window\.([\w.]+)/);
-      if (match) {
-        return this.getGlobalProperty(match[1]);
+    // 関数をより正確に解析
+    try {
+      // プロパティ設定の検出
+      if (fnString.includes('window.') && fnString.includes('=')) {
+        // window.プロパティ = 値 の形式を検出
+        const setMatches = fnString.match(/window\.(\w+)\s*=\s*([^;]+)/g);
+        if (setMatches) {
+          setMatches.forEach(match => {
+            const [, propName, value] = match.match(/window\.(\w+)\s*=\s*(.+)/);
+            let actualValue;
+            
+            // 値の型を判定
+            if (value.includes("'") || value.includes('"')) {
+              actualValue = value.replace(/['"]/g, '');
+            } else if (value === 'true') {
+              actualValue = true;
+            } else if (value === 'false') {
+              actualValue = false;
+            } else if (!isNaN(value)) {
+              actualValue = Number(value);
+            } else {
+              actualValue = value;
+            }
+            
+            this.setGlobalProperty(propName, actualValue);
+          });
+        }
       }
-    }
+      
+      // オブジェクト作成の検出（複数プロパティの同時設定）
+      if (fnString.includes('{') && fnString.includes(':')) {
+        const objectMatch = fnString.match(/\{\s*([^}]+)\s*\}/);
+        if (objectMatch) {
+          const objectContent = objectMatch[1];
+          const properties = objectContent.split(',');
+          const result = {};
+          
+          properties.forEach(prop => {
+            const [key, value] = prop.split(':').map(s => s.trim());
+            if (key && value) {
+              const cleanKey = key.replace(/['"]/g, '');
+              
+              // window.プロパティへのアクセスを検出
+              if (value.includes('window.')) {
+                const propName = value.match(/window\.(\w+)/)[1];
+                result[cleanKey] = this.getGlobalProperty(propName);
+              } else {
+                result[cleanKey] = value;
+              }
+            }
+          });
+          
+          return result;
+        }
+      }
+      
+      // Three.jsオブジェクトの作成をシミュレート
+      if (fnString.includes('new THREE.Scene')) {
+        return { type: 'Scene', children: [] };
+      }
+      
+      if (fnString.includes('new THREE.Mesh')) {
+        return { type: 'Mesh', geometry: {}, material: {} };
+      }
+      
+      // 単純なwindowプロパティアクセスの検出
+      if (fnString.includes('window.') && !fnString.includes('=')) {
+        const match = fnString.match(/window\.(\w+)/);
+        if (match) {
+          return this.getGlobalProperty(match[1]);
+        }
+      }
 
-    // falseを返す関数の場合の判定を追加
-    if (fnString.includes('() => false') || fnString.includes('function() { return false; }')) {
-      return false;
+      // falseを返す関数の場合の判定
+      if (fnString.includes('() => false') || fnString.includes('function() { return false; }')) {
+        return false;
+      }
+      
+      // 関数型の条件チェック
+      if (typeof fn === 'function') {
+        try {
+          // 実際に関数を実行してみる（安全な範囲で）
+          const result = fn();
+          return result;
+        } catch (e) {
+          // 実行できない場合はデフォルト値を返す
+        }
+      }
+    } catch (error) {
+      // 解析エラーの場合はデフォルト動作
     }
     
-    // デフォルトの戻り値
+    // デフォルトの戻り値：falseを明示的に返すケース以外はtrue
     return true;
   }
 
@@ -348,6 +426,13 @@ class MockBrowserManager {
   getGlobalProperty(name) {
     this._globalProperties = this._globalProperties || {};
     return this._globalProperties[name];
+  }
+
+  /**
+   * グローバルプロパティのクリア
+   */
+  clearGlobalProperties() {
+    this._globalProperties = {};
   }
 
   /**
