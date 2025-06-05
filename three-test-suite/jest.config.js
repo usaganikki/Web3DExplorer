@@ -49,7 +49,8 @@ export default {
         "**/__tests__/unit/*PerformanceTester*.test.js",
         "**/__tests__/unit/*ThreeTestSuite*.test.js",
         "**/__tests__/unit/*SceneInspector*.test.js",
-        "**/__tests__/unit/*TestIsolationHelper*.test.js"
+        "**/__tests__/unit/*TestIsolationHelper*.test.js",
+        "**/__tests__/unit/*TestDataGenerator*.test.js"
       ],
       testEnvironment: "node",
     },
