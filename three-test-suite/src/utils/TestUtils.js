@@ -27,7 +27,8 @@ export class TestUtils {
           'legacyTestComplete', 'sceneObjects', 'sceneAnalysis',
           'userScript', 'scene', 'camera', 'renderer', 'testProperty',
           'testCondition', 'testComplete', 'integrationTestComplete',
-          'multiComponentTest', 'testScene', 'sceneBuilt'
+          'multiComponentTest', 'testScene', 'sceneBuilt', 'testId',
+          'uniqueValue', 'testExecuted', 'integrationTest'
         ];
 
         testProperties.forEach(prop => {
@@ -84,6 +85,11 @@ export class TestUtils {
           });
         }
       });
+
+      // MockBrowserManagerのグローバルプロパティもクリア
+      if (page._mockBrowserManager && typeof page._mockBrowserManager.clearGlobalProperties === 'function') {
+        page._mockBrowserManager.clearGlobalProperties();
+      }
     } catch (error) {
       // グローバル状態リセットでエラーが発生しても、テストを続行する
       console.warn('Global state reset failed:', error.message);
@@ -120,6 +126,11 @@ export class TestUtils {
     
     await browserManager.initialize();
     
+    // MockBrowserManagerとページの相互参照を設定
+    if (browserManager.page) {
+      browserManager.page._mockBrowserManager = browserManager;
+    }
+    
     // 初期状態でのグローバル状態をクリア
     await TestUtils.resetGlobalState(browserManager.page);
     
@@ -130,7 +141,7 @@ export class TestUtils {
    * 非同期処理を安全に待機し、タイムアウト・リトライ機能を提供
    * MockBrowserManagerに最適化されたバージョン
    * @param {Object} page - MockBrowserManagerのpageオブジェクト
-   * @param {Function} condition - 待機する条件を返す関数
+   * @param {Function|string} condition - 待機する条件を返す関数または文字列
    * @param {Object} options - オプション設定
    * @returns {Promise} 条件が満たされた時点で解決
    */
@@ -143,13 +154,24 @@ export class TestUtils {
     } = options;
 
     let attempt = 0;
+    const timeoutPerAttempt = Math.floor(timeout / retries);
     
     while (attempt < retries) {
       try {
-        await page.waitForFunction(condition, { 
-          timeout: timeout / retries,
-          polling: interval 
-        });
+        // 文字列の場合と関数の場合で処理を分ける
+        if (typeof condition === 'string') {
+          await page.waitForFunction(condition, { 
+            timeout: timeoutPerAttempt,
+            polling: interval 
+          });
+        } else if (typeof condition === 'function') {
+          await page.waitForFunction(condition, { 
+            timeout: timeoutPerAttempt,
+            polling: interval 
+          });
+        } else {
+          throw new Error('Condition must be a function or string');
+        }
         return; // 成功時は即座に返る
       } catch (error) {
         attempt++;
