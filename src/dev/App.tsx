@@ -1,4 +1,5 @@
 import React from 'react';
+import { BasicCube } from '@/learning/step1-basic/BasicCube'
 
 const App: React.FC = () => {
   return (
@@ -11,7 +12,7 @@ const App: React.FC = () => {
         <div style={{ marginLeft: '20px' }}>
           <h3>Step 1.1: 最小限のThree.jsアプリケーション</h3>
           <p>BasicCubeコンポーネントがここに表示されます（実装後）</p>
-          {/* BasicCube コンポーネントは後で追加 */}
+          <BasicCube />
         </div>
       </div>
     </div>

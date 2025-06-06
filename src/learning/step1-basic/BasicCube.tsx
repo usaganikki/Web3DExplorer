@@ -5,15 +5,36 @@ export const BasicCube: React.FC = () => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
 
     useEffect(() => {
+        if(!canvasRef.current) {
+            return;
+        }
 
         // 1. Scene、Camera、Rendererの初期化
+        const scene = new THREE.Scene();
+
+        const camera = new THREE.PerspectiveCamera(
+            75,
+            window.innerWidth / window.innerHeight,
+            0.1,
+            1000
+        )
+
+        const renderer = new THREE.WebGLRenderer({
+            canvas: canvasRef.current
+        });
+
+        renderer.setSize(window.innerWidth, window.innerHeight);
+
+        camera.position.z = 5;
+
+        renderer.render(scene, camera);
         // 2. Cube（Geometry + Material + Mesh）の作成
         // 3. OrbitControlsの設定
         // 4. アニメーションループの開始
         // 5. リサイズハンドラーの設定
-        
-        return() => {
 
+        return() => {
+            renderer.dispose();
         };
     },[]);
 
