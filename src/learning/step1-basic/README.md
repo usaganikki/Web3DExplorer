@@ -172,4 +172,75 @@ WebGPUは、WebGLの後継となる新しいウェブグラフィックスAPIで
 *   Three.jsでもWebGPUに対応したレンダラーの開発が進められていますが、現時点 (2025年6月) では実験的な段階です。
 *   現在の学習では `WebGLRenderer` を使用します。
 
+### 5. ジオメトリ (Geometry)
+
+Three.jsにおける**ジオメトリ (Geometry)** とは、3Dオブジェクトの**形状**を定義するものです。具体的には、オブジェクトを構成する頂点（空間上の点の集まり）や面（それらの頂点を結んでできる多角形）の情報を保持しています。
+
+ジオメトリは、オブジェクトがどのような形をしているか（立方体なのか、球体なのか、もっと複雑な形なのか）を決定する骨組みのようなものと考えてください。これにマテリアル（色や質感）を組み合わせることで、最終的な表示物であるメッシュ (Mesh) が作られます。
+
+**Mesh = Geometry (形状) + Material (見た目)**
+
+#### `BoxGeometry` の解説
+
+`BoxGeometry` は、その名の通り**直方体（箱型）**のジオメトリを簡単に作成するためのクラスです。
+
+```javascript
+const geometry = new THREE.BoxGeometry(width, height, depth, widthSegments, heightSegments, depthSegments);
+```
+
+主なパラメータは以下の通りです。
+
+*   `width`: X軸方向の幅。デフォルトは1です。
+*   `height`: Y軸方向の高さ。デフォルトは1です。
+*   `depth`: Z軸方向の奥行き。デフォルトは1です。
+*   `widthSegments` (オプション): 幅方向の分割数。デフォルトは1です。
+*   `heightSegments` (オプション): 高さ方向の分割数。デフォルトは1です。
+*   `depthSegments` (オプション): 奥行き方向の分割数。デフォルトは1です。
+
+#### その他の代表的なジオメトリ
+
+*   **`SphereGeometry`**: 球体
+*   **`PlaneGeometry`**: 平面
+*   **`CylinderGeometry`**: 円柱
+*   **`ConeGeometry`**: 円錐
+*   **`TorusGeometry`**: ドーナツ形状（トーラス）
+*   **`BufferGeometry`**: より汎用的なジオメトリクラス
+
+### 6. マテリアル (Material)
+
+Three.jsにおける**マテリアル (Material)** とは、3Dオブジェクトの**見た目や質感**を定義するものです。ジオメトリがオブジェクトの「形」を決定するのに対し、マテリアルはその表面がどのように光を反射し、どのような色やテクスチャを持つかを決定します。
+
+主な要素：
+
+*   **色 (Color)**
+*   **透明度 (Opacity/Transparency)**
+*   **光沢 (Shininess)**
+*   **テクスチャ (Texture/Map)**
+*   **ワイヤーフレーム (Wireframe)**
+
+#### `MeshBasicMaterial` の解説
+
+`MeshBasicMaterial` は、最もシンプルなマテリアルの一つで、**光源の影響を受けません**。常に指定された色で均一に表示されます。
+
+```javascript
+const material = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
+```
+
+主なプロパティ：
+
+*   `color`: マテリアルの色。
+*   `wireframe`: ワイヤーフレーム表示にするか。
+*   `opacity`: 透明度 (0.0 - 1.0)。`transparent` を `true` にする必要あり。
+*   `transparent`: 透明度を有効にするか。
+*   `map`: 表面に貼り付けるテクスチャ。
+
+#### その他の代表的なマテリアル
+
+*   **`MeshLambertMaterial`**: 拡散反射（マットな表面）。計算負荷が比較的軽い。
+*   **`MeshPhongMaterial`**: 鏡面反射（ハイライト、光沢）も表現可能。
+*   **`MeshStandardMaterial`**: 物理ベースレンダリング (PBR) の標準マテリアル。金属っぽさ (`metalness`) や表面の粗さ (`roughness`) を調整可能。推奨。
+*   **`MeshPhysicalMaterial`**: `MeshStandardMaterial` を拡張し、さらに高度な物理ベース表現が可能。
+*   **`MeshNormalMaterial`**: 法線ベクトルを色として表示。デバッグ用。
+*   **`ShaderMaterial` / `RawShaderMaterial`**: GLSLでカスタムシェーダーを記述するためのマテリアル。
+
 （ここに今後Three.jsについて学んだことを記述していきます。）

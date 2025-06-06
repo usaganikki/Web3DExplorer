@@ -27,8 +27,19 @@ export const BasicCube: React.FC = () => {
 
         camera.position.z = 5;
 
-        renderer.render(scene, camera);
         // 2. Cube（Geometry + Material + Mesh）の作成
+        const geometry = new THREE.BoxGeometry(1, 1, 1);
+
+        const material = new THREE.MeshBasicMaterial({
+            color: 0x00ff00
+        });
+
+        const cube = new THREE.Mesh(geometry, material);
+
+        scene.add(cube);
+
+        renderer.render(scene, camera);
+
         // 3. OrbitControlsの設定
         // 4. アニメーションループの開始
         // 5. リサイズハンドラーの設定
