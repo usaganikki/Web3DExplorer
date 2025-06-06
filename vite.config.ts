@@ -1,8 +1,24 @@
 import { defineConfig } from 'vite';
 import path from 'path';
-import typescript from '@rollup/plugin-typescript'; // RollupのTypeScriptプラグイン
+// import typescript from '@rollup/plugin-typescript'; // ライブラリビルド用（学習期間中はコメントアウト）
 
 export default defineConfig({
+  // 🆕 開発サーバー設定（学習用）
+  server: {
+    port: 3000,
+    open: true,
+  },
+  root: '.',
+
+  // エイリアス設定（学習でも既存コード参照時に使用）
+  resolve: {
+    alias: {
+      '@': path.resolve(__dirname, 'src'),
+    },
+  },
+
+  // 📦 ライブラリビルド設定（学習期間中はコメントアウト）
+  /*
   build: {
     lib: {
       entry: path.resolve(__dirname, 'src/index.ts'),
@@ -34,9 +50,5 @@ export default defineConfig({
     sourcemap: true,
     // emptyOutDir: false, // tsc が dist を使うので、Vite がクリアしないようにする (必要に応じて)
   },
-  resolve: {
-    alias: {
-      '@': path.resolve(__dirname, 'src'),
-    },
-  },
+  */
 });
