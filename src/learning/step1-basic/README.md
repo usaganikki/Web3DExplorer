@@ -119,7 +119,7 @@
     *   Reactコンポーネント内の `<canvas>` 要素をThree.jsの描画ターゲットとして使用します。
 2.  **`useEffect` でThree.jsの初期化**:
     *   コンポーネントのマウント後に一度だけ実行されるように、依存配列を空 `[]` にします。
-    *   この中で、シーン、カメラ、レンダラーを作成します。
+    *   この中で、シーン、カメラ、レンダラー、オブジェクト、カメラコントロールを作成し、アニメーションループを開始します。
 3.  **シーン (Scene) の作成**:
     *   3Dオブジェクトやライトを配置するための空間です。
     *   `const scene = new THREE.Scene();`
@@ -130,11 +130,18 @@
     *   シーンとカメラの情報に基づいて、指定された `<canvas>` 要素に描画します。`BasicCube.tsx` では `WebGLRenderer` を使用しています。
     *   `const renderer = new THREE.WebGLRenderer({ canvas: canvasRef.current });`
     *   `renderer.setSize(width, height);` で描画サイズを設定します。
-6.  **初期描画**:
-    *   `renderer.render(scene, camera);` を呼び出して、初期状態のシーンを描画します。
-    *   (アニメーションループは今後のステップで実装)
-7.  **クリーンアップ**:
-    *   `useEffect` のクリーンアップ関数内で、`renderer.dispose();` を呼び出し、Three.jsが使用したリソースを解放します。
+6.  **オブジェクト (Mesh) の作成とシーンへの追加**:
+    *   `BoxGeometry` と `MeshBasicMaterial` を使用してキューブを作成し、シーンに追加します。
+    *   `const cube = new THREE.Mesh(geometry, material);`
+    *   `scene.add(cube);`
+7.  **カメラコントロール (`OrbitControls`) の設定**: (詳細は後述の「7. カメラコントロール (`OrbitControls`)」を参照)
+    *   ユーザーがマウスやタッチ操作でカメラを制御できるようにします。
+    *   `const controls = new OrbitControls(camera, renderer.domElement);`
+8.  **アニメーションループの開始**: (詳細は後述の「8. アニメーションループ」を参照)
+    *   `requestAnimationFrame` を使用して、継続的にシーンの更新とレンダリングを行います。
+    *   これにより、カメラ操作やオブジェクトのアニメーションが滑らかに表示されます。
+9.  **クリーンアップ**:
+    *   `useEffect` のクリーンアップ関数内で、`renderer.dispose();` と `controls.dispose();` を呼び出し、Three.jsが使用したリソース（レンダラーやイベントリスナーなど）を解放します。
 
 ### 2. カメラ (Camera) - `PerspectiveCamera`
 
@@ -242,5 +249,73 @@ const material = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
 *   **`MeshPhysicalMaterial`**: `MeshStandardMaterial` を拡張し、さらに高度な物理ベース表現が可能。
 *   **`MeshNormalMaterial`**: 法線ベクトルを色として表示。デバッグ用。
 *   **`ShaderMaterial` / `RawShaderMaterial`**: GLSLでカスタムシェーダーを記述するためのマテリアル。
+
+### 7. カメラコントロール (`OrbitControls`)
+
+`OrbitControls` は、ユーザーがマウスやタッチ操作によって3Dシーン内のカメラを直感的に制御（回転、パン、ズーム）できるようにするためのユーティリティです。
+
+*   **インポート**:
+    *   `OrbitControls` はThree.jsのコア機能ではなく、`examples/jsm/controls/OrbitControls.js` に含まれる追加モジュールです。そのため、以下のようにインポートします。
+        ```typescript
+        import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+        ```
+    *   Three.jsでは、コアライブラリを軽量に保ちつつ豊富な拡張機能を提供するため、このような便利なユーティリティが `examples` ディレクトリ配下に提供されることがよくあります。これは「実装例」という意味合いだけでなく、「再利用可能なモジュール群」としての役割も持っています。
+
+*   **基本的な使い方**:
+    *   コンストラクタには、操作対象のカメラオブジェクトと、イベントリスナーを登録するDOM要素（通常はレンダラーのcanvas要素）を渡します。
+        ```typescript
+        const controls = new OrbitControls(camera, renderer.domElement);
+        ```
+
+*   **`BasicCube.tsx` での設定例と主要プロパティ**:
+    *   `controls.enableDamping = true;`: カメラ操作に慣性（滑らかな動き）を持たせます。
+    *   `controls.dampingFactor = 0.05;`: ダンピングの強さを調整します。値が小さいほど滑らかになります。
+    *   `controls.enableZoom = true;`: マウスホイールやピンチ操作によるズームを有効にします（デフォルトは `true`）。
+    *   `controls.enablePan = true;`: 右クリックドラッグなどによるパン（カメラの平行移動）を有効にします（デフォルトは `true`）。
+
+*   **`controls.update()` の重要性**:
+    *   `enableDamping = true` や `autoRotate = true` （自動回転）を設定した場合、アニメーションループ内で毎フレーム `controls.update()` を呼び出す必要があります。これにより、慣性や自動回転が正しく適用され、カメラが滑らかに動き続けます。
+    *   `BasicCube.tsx` のアニメーションループでは、この `controls.update()` が呼び出されています。
+
+*   **クリーンアップ**:
+    *   コンポーネントがアンマウントされる際には、`OrbitControls` が登録したイベントリスナーなどを解放するために `controls.dispose()` を呼び出すことが推奨されます。
+        ```typescript
+        // useEffectのクリーンアップ関数内
+        return () => {
+          renderer.dispose();
+          controls.dispose(); // OrbitControlsのリソースも解放
+        };
+        ```
+
+### 8. アニメーションループ
+
+Three.jsでインタラクティブな体験やアニメーションを実現するためには、アニメーションループが不可欠です。アニメーションループは、画面の更新レートに合わせて継続的にシーンの描画を行う仕組みです。
+
+*   **`requestAnimationFrame`**:
+    *   ブラウザの描画タイミングに合わせて関数を呼び出すためのAPIです。これにより、滑らかで効率的なアニメーションが実現できます。
+    *   `BasicCube.tsx` では、`animate` 関数内で再帰的に `requestAnimationFrame(animate)` を呼び出すことでループを形成しています。
+
+*   **ループ内で行う主な処理**:
+    1.  **状態の更新**:
+        *   オブジェクトの位置、回転、スケールなどの更新（例: `cube.rotation.y += 0.01;`）。
+        *   カメラコントロールの更新: `controls.update()` を呼び出し、ダンピングや自動回転などを適用します。
+    2.  **レンダリング**:
+        *   更新されたシーンの状態を元に、`renderer.render(scene, camera)` を呼び出して画面に描画します。
+
+*   **`BasicCube.tsx` でのアニメーションループ**:
+    ```typescript
+    // useEffect内
+    const animate = () => {
+        // (将来的にオブジェクトのアニメーションなどをここに追加)
+
+        controls.update(); // OrbitControlsの状態を更新 (ダンピングなど)
+        renderer.render(scene, camera); // シーンをレンダリング
+
+        requestAnimationFrame(animate); // 次のフレームで再度animateを呼び出す
+    };
+
+    animate(); // アニメーションループを開始
+    ```
+    このループにより、`OrbitControls` によるカメラの変更（回転、パン、ズーム、ダンピング効果）がリアルタイムに画面に反映されるようになります。
 
 （ここに今後Three.jsについて学んだことを記述していきます。）

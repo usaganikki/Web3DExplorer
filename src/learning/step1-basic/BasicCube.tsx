@@ -1,5 +1,6 @@
 import React, {useRef, useEffect} from "react";
 import * as THREE from 'three';
+import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls'
 
 export const BasicCube: React.FC = () => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -38,14 +39,27 @@ export const BasicCube: React.FC = () => {
 
         scene.add(cube);
 
-        renderer.render(scene, camera);
-
         // 3. OrbitControlsの設定
+        const controls = new OrbitControls(camera, renderer.domElement);
+
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+        controls.enableZoom = true;
+        controls.enablePan = true;
+
         // 4. アニメーションループの開始
+        const animate = () => {
+            controls.update();
+            renderer.render(scene, camera);
+            requestAnimationFrame(animate);
+        }
+
+        animate();
         // 5. リサイズハンドラーの設定
 
         return() => {
             renderer.dispose();
+            controls.dispose();
         };
     },[]);
 
