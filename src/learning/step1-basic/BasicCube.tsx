@@ -51,7 +51,7 @@ export const BasicCube: React.FC = () => {
         const animate = () => {
             cube.rotation.x += 0.01;
             cube.rotation.y += 0.01;
-            
+
             controls.update();
             renderer.render(scene, camera);
             requestAnimationFrame(animate);
@@ -59,10 +59,19 @@ export const BasicCube: React.FC = () => {
 
         animate();
         // 5. リサイズハンドラーの設定
+        const handleResize = () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        window.addEventListener('resize', handleResize);
 
         return() => {
             renderer.dispose();
             controls.dispose();
+            window.removeEventListener('resize', handleResize);
         };
     },[]);
 

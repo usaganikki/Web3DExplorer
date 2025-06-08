@@ -357,4 +357,37 @@ Three.jsでインタラクティブな体験やアニメーションを実現す
     ```
 *   **効率性**: `setTimeout` や `setInterval` と比較して、ブラウザの描画サイクルに最適化されており、パフォーマンスが良く、タブが非アクティブな場合には自動的に実行頻度が調整されるなど、効率的な動作をします。
 
+### 11. リサイズ処理 (ウィンドウサイズ変更への対応)
+
+ブラウザウィンドウのサイズが変更された際に、3Dシーンの表示が崩れないように対応するための処理です。
+
+*   **`handleResize` 関数の実装**:
+    *   `BasicCube.tsx` の `useEffect` 内で、ウィンドウリサイズ時に実行される `handleResize` 関数を定義しました。
+        ```typescript
+        // BasicCube.tsx より抜粋
+        const handleResize = () => {
+            // カメラのアスペクト比を現在のウィンドウサイズに合わせて更新
+            camera.aspect = window.innerWidth / window.innerHeight;
+            // カメラのプロジェクション行列を再計算・更新
+            camera.updateProjectionMatrix();
+
+            // レンダラーの描画サイズを現在のウィンドウサイズに合わせて更新
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+        ```
+*   **イベントリスナーの登録と解除**:
+    *   コンポーネントのマウント時に `window.addEventListener('resize', handleResize)` でリサイズイベントを監視し、アンマウント時に `window.removeEventListener('resize', handleResize)` でリスナーを解除します。これによりメモリリークを防ぎます。
+
+*   **関連する学習ポイント**:
+    *   **`window.innerWidth` vs `window.outerWidth`**:
+        *   `window.innerWidth` および `window.innerHeight` は、ウェブページが表示される**ビューポート**のサイズ（スクロールバー含む）を返します。コンテンツのレイアウトやThree.jsのレンダリングサイズには通常こちらを使用します。
+        *   `window.outerWidth` および `window.outerHeight` は、ブラウザウィンドウ全体のサイズ（アドレスバー、タブバー、ウィンドウ枠などすべて含む）を返します。
+        *   現在の実装では、ビューポートのサイズである `window.innerWidth` / `window.innerHeight` を基準にアスペクト比とレンダラーサイズを決定しています。これは、canvasがウィンドウ全体を占めるような場合に適しています。canvasがページ内の一部である場合は、canvas要素自体の `clientWidth` / `clientHeight` を使用することを検討する必要があります。
+
+    *   **`camera.updateProjectionMatrix()` の役割**:
+        *   カメラのプロパティ（`fov`, `aspect`, `near`, `far` など、カメラの視錐台を定義するもの）が変更された後に呼び出すメソッドです。
+        *   このメソッドを呼び出すことで、変更されたプロパティに基づいてカメラの**プロジェクション行列**が再計算・更新されます。
+        *   プロジェクション行列は、3D空間のオブジェクトを2Dスクリーンに投影する方法を定義する重要な行列です。これを更新しないと、カメラプロパティの変更がレンダリングに正しく反映されず、表示が歪むなどの問題が発生します。
+        *   リサイズ処理で `camera.aspect` を変更した後に `camera.updateProjectionMatrix()` を呼び出すのは、このためです。
+
 （ここに今後Three.jsについて学んだことを記述していきます。）
