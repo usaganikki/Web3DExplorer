@@ -275,7 +275,7 @@ const material = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
 
 *   **`controls.update()` の重要性**:
     *   `enableDamping = true` や `autoRotate = true` （自動回転）を設定した場合、アニメーションループ内で毎フレーム `controls.update()` を呼び出す必要があります。これにより、慣性や自動回転が正しく適用され、カメラが滑らかに動き続けます。
-    *   `BasicCube.tsx` のアニメーションループでは、この `controls.update()` が呼び出されています。
+    *   `BasicCube.tsx` のアニメーションループでは、この `controls.update()` が呼び出されています。 (詳細は「9. `OrbitControls` とアニメーションループの連携 (`controls.update()` の役割)」を参照)
 
 *   **クリーンアップ**:
     *   コンポーネントがアンマウントされる際には、`OrbitControls` が登録したイベントリスナーなどを解放するために `controls.dispose()` を呼び出すことが推奨されます。
@@ -297,16 +297,23 @@ Three.jsでインタラクティブな体験やアニメーションを実現す
 
 *   **ループ内で行う主な処理**:
     1.  **状態の更新**:
-        *   オブジェクトの位置、回転、スケールなどの更新（例: `cube.rotation.y += 0.01;`）。
-        *   カメラコントロールの更新: `controls.update()` を呼び出し、ダンピングや自動回転などを適用します。
+        *   オブジェクトの位置、回転、スケールなどの更新。
+            *   **今回の実装**: `BasicCube.tsx` の `animate` 関数内で、キューブのX軸とY軸の回転を毎フレーム更新するようにしました。
+              ```typescript
+              // BasicCube.tsx より抜粋
+              cube.rotation.x += 0.01; // X軸周りに回転
+              cube.rotation.y += 0.01; // Y軸周りに回転
+              ```
+        *   カメラコントロールの更新: `controls.update()` を呼び出し、ダンピングや自動回転などを適用します (詳細は「9. `OrbitControls` とアニメーションループの連携」を参照)。
     2.  **レンダリング**:
         *   更新されたシーンの状態を元に、`renderer.render(scene, camera)` を呼び出して画面に描画します。
 
-*   **`BasicCube.tsx` でのアニメーションループ**:
+*   **`BasicCube.tsx` でのアニメーションループ (更新後)**:
     ```typescript
     // useEffect内
     const animate = () => {
-        // (将来的にオブジェクトのアニメーションなどをここに追加)
+        cube.rotation.x += 0.01; // キューブをX軸周りに回転
+        cube.rotation.y += 0.01; // キューブをY軸周りに回転
 
         controls.update(); // OrbitControlsの状態を更新 (ダンピングなど)
         renderer.render(scene, camera); // シーンをレンダリング
@@ -316,6 +323,38 @@ Three.jsでインタラクティブな体験やアニメーションを実現す
 
     animate(); // アニメーションループを開始
     ```
-    このループにより、`OrbitControls` によるカメラの変更（回転、パン、ズーム、ダンピング効果）がリアルタイムに画面に反映されるようになります。
+    このループにより、キューブが自動的に回転し続け、かつ `OrbitControls` によるカメラの変更（回転、パン、ズーム、ダンピング効果）がリアルタイムに画面に反映されるようになります。
+
+### 9. `OrbitControls` とアニメーションループの連携 (`controls.update()` の役割)
+
+`OrbitControls` を使用する際、アニメーションループ内で `controls.update()` を呼び出すことの重要性について。
+
+*   **役割**: `controls.update()` は、ユーザーの入力（マウス操作など）や `OrbitControls` の内部状態（例: `enableDamping = true` の場合の慣性効果）に基づいて、カメラオブジェクト (`camera`) のプロパティ（位置、回転など）を実際に更新します。
+*   **必要性**:
+    *   特に `enableDamping = true` を設定してカメラの動きに滑らかな慣性を持たせたい場合、毎フレーム `controls.update()` を呼び出すことで、その慣性計算が正しく行われ、カメラの状態が適切に更新されます。
+    *   これを呼び出さないと、ダンピング効果が得られなかったり、カメラの動きが意図通りにならなかったりする可能性があります。
+*   **`renderer.render()` との関係**:
+    1.  `controls.update()` がカメラの状態を更新します。
+    2.  その直後に呼び出される `renderer.render(scene, camera)` は、その**更新された最新のカメラ状態**を元にシーンを描画します。
+    *   この2つの処理が連携することで、インタラクティブでスムーズなカメラ操作が実現されます。
+
+### 10. `requestAnimationFrame` の詳細
+
+アニメーションループの核となる `requestAnimationFrame(callback)` についての補足。
+
+*   **基本的な動作**: ブラウザに対して「次の描画フレームを更新する準備ができたタイミングで、指定された `callback` 関数を実行してください」と要求します。
+*   **コールバック関数**:
+    *   引数として渡される `callback` は通常のJavaScript関数です。そのため、関数内に記述された処理（アニメーション関連か否かに関わらず）はすべて実行されます。
+    *   ただし、高いフレームレートを維持するため、コールバック関数内には重い処理（長時間の計算や同期的な処理）を記述することは避けるべきです。
+*   **引数の数**: `requestAnimationFrame` は一度の呼び出しで**1つのコールバック関数のみ**を引数として取ります。複数の処理を実行したい場合は、それらを1つの親関数にまとめて渡すのが一般的です。
+*   **ループの形成**: コールバック関数内で再度 `requestAnimationFrame` に自身を渡すことで、連続的なアニメーションループが形成されます。
+    ```javascript
+    function animateLoop() {
+      // ... アニメーション処理 ...
+      requestAnimationFrame(animateLoop); // 再帰的に呼び出し
+    }
+    animateLoop(); // ループ開始
+    ```
+*   **効率性**: `setTimeout` や `setInterval` と比較して、ブラウザの描画サイクルに最適化されており、パフォーマンスが良く、タブが非アクティブな場合には自動的に実行頻度が調整されるなど、効率的な動作をします。
 
 （ここに今後Three.jsについて学んだことを記述していきます。）

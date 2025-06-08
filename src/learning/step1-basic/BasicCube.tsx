@@ -49,6 +49,9 @@ export const BasicCube: React.FC = () => {
 
         // 4. アニメーションループの開始
         const animate = () => {
+            cube.rotation.x += 0.01;
+            cube.rotation.y += 0.01;
+            
             controls.update();
             renderer.render(scene, camera);
             requestAnimationFrame(animate);
