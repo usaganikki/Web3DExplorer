@@ -9,6 +9,9 @@ export const InteractiveCube: React.FC = () => {
     const [cubeColor, setCubeColor] = useState<string>('green');
     const [cubeSize, setCubeSize] = useState<number>(1.0);
     const [cubePositionX, setCubePositionX] = useState<number>(0);
+    const [rotationSpeed, setRotationSpeed] = useState<number>(0.01);
+
+    const rotationSpeedRef = useRef(rotationSpeed);
 
     useEffect(() => {
         if(!canvasRef.current) {
@@ -56,8 +59,10 @@ export const InteractiveCube: React.FC = () => {
 
         // 4. アニメーションループの開始
         const animate = () => {
-            cube.rotation.x += 0.01;
-            cube.rotation.y += 0.01;
+            cube.rotation.x += rotationSpeedRef.current;
+            cube.rotation.y += rotationSpeedRef.current;
+            // cube.rotation.x += 0.01;
+            // cube.rotation.y += 0.01;
 
             controls.update();
             renderer.render(scene, camera);
@@ -122,6 +127,10 @@ export const InteractiveCube: React.FC = () => {
 
     }, [cubePositionX]);
 
+    useEffect(() => {
+        rotationSpeedRef.current = rotationSpeed;
+    }, [rotationSpeed]);
+
     return (
         <div style={{ width: '100%', height: '100%' }}>
             <div style={{position: 'absolute',
@@ -158,6 +167,19 @@ export const InteractiveCube: React.FC = () => {
                         step="0.1"
                         value={cubePositionX}
                         onChange={(e) => setCubePositionX(parseFloat(e.target.value))}
+                    />
+                </div>
+                <div style={{marginTop:'10px'}}>
+                    <span style={{color:'white'}}>
+                        回転速度: {rotationSpeed.toFixed(2)}
+                    </span>
+                    <input 
+                        type="range" 
+                        min="0" 
+                        max="0.1" 
+                        step="0.001"
+                        value={rotationSpeed}
+                        onChange={(e) => setRotationSpeed(parseFloat(e.target.value))}
                     />
                 </div>
             </div>

@@ -148,6 +148,74 @@ cubeRef.current = cube;
     *   これを避けるには、`useRef<THREE.Mesh | null>(null)` のように型引数で `null` を明示的に許容する必要がある。これにより、`.current` プロパティが書き換え可能になる。
     *   特に `null` を初期値として使う強い理由がない場合は、`useRef<THREE.Mesh>()` (初期値 `undefined`) を使用するのが簡潔で適切である。
 
+### 3. アニメーションループにおけるState値の同期問題と`useRef`による解決（回転速度の例）
+
+`InteractiveCube.tsx` に回転速度を動的に変更する機能を追加する過程で、Reactの `state` と `requestAnimationFrame` を用いたアニメーションループとの間で、`state` の最新値が正しく参照されないという問題に直面した。これは、Reactコンポーネント内でThree.jsのような外部ライブラリと連携してアニメーションを制御する際に頻繁に遭遇しうる典型的な課題である。
+
+#### 3.1. 問題の現象と原因
+
+**現象:**
+UI上のスライダーで回転速度 (`rotationSpeed` state) を変更しても、実際のキューブの回転アニメーションにはその変更が反映されず、初期値のまま回転し続ける。
+
+**原因:**
+この問題の根本原因は、`useEffect` フックの依存配列が空 `[]` の場合に、そのコールバック関数（およびその中で定義される関数、例えば `animate`）がコンポーネントのマウント時に一度だけ生成され、その時点での `rotationSpeed` stateの値を**クロージャとしてキャプチャ**してしまう点にある。
+
+```typescript
+// 問題があったコードの抜粋 (useEffect内)
+useEffect(() => {
+  // ...
+  const animate = () => {
+    // この animate 関数はマウント時の rotationSpeed の値を参照し続ける
+    cube.rotation.x += rotationSpeed; // rotationSpeed は初期値のまま
+    cube.rotation.y += rotationSpeed; // rotationSpeed は初期値のまま
+    // ...
+    requestAnimationFrame(animate);
+  };
+  animate();
+}, []); // 依存配列が空のため、rotationSpeed の変更で再実行されない
+```
+`requestAnimationFrame(animate)` でスケジュールされる `animate` 関数は、常に最初にキャプチャされた `rotationSpeed` の値を参照するため、stateが更新されてもアニメーションの挙動は変わらない。
+
+#### 3.2. `useRef` を用いた解決策
+
+この問題を解決するために、`useRef` フックを利用して `rotationSpeed` stateの最新値を保持し、アニメーションループ内ではそのrefの `.current` プロパティを参照する方法を採用した。
+
+**修正のポイント:**
+
+1.  **`useRef` でstateの値を保持するrefを作成:**
+    ```typescript
+    const rotationSpeedRef = useRef(rotationSpeed);
+    ```
+    この `rotationSpeedRef` はコンポーネントのライフサイクルを通じて同一のオブジェクトであり、その `.current` プロパティは可変である。
+
+2.  **state変更時にrefの値を更新する `useEffect` を追加:**
+    ```typescript
+    useEffect(() => {
+      rotationSpeedRef.current = rotationSpeed;
+    }, [rotationSpeed]); // rotationSpeed state が変更されるたびに実行
+    ```
+    これにより、`rotationSpeedRef.current` は常に最新の `rotationSpeed` stateの値を指すようになる。
+
+3.  **アニメーションループ内でrefの値を参照:**
+    ```typescript
+    // メインのuseEffect(..., []) 内の animate 関数
+    const animate = () => {
+      cube.rotation.x += rotationSpeedRef.current; // 最新の値を参照
+      cube.rotation.y += rotationSpeedRef.current; // 最新の値を参照
+      // ...
+      requestAnimationFrame(animate);
+    };
+    ```
+    `animate` 関数は `rotationSpeedRef` オブジェクト自体をキャプチャするが、その `.current` プロパティは外部から変更可能なため、常に最新の回転速度を参照できる。
+
+#### 3.3. この経験からの学び
+
+*   **Reactのレンダリングサイクル外でのstateアクセス:** `requestAnimationFrame` や `setInterval`、イベントリスナーのコールバックなど、Reactの通常のレンダリングサイクルの外で実行される関数から最新のstate値にアクセスする際には、クロージャによる値のキャプチャに注意が必要である。
+*   **`useRef` の柔軟な活用:** `useRef` はDOM要素への参照だけでなく、このように可変な値をコンポーネントのライフサイクルを通じて保持し、Reactのレンダリングに影響されずに読み書きするための汎用的なコンテナとしても非常に有用である。
+*   **デバッグとテストの重要性:** 今回の問題は、UI操作に対する視覚的なフィードバック（キューブの回転速度が変わらない）から発見された。このようなインタラクション起因の挙動の変化は、手動テストでは見落とされる可能性もある。将来的に、特定のstate変更が期待通りに描画やアニメーションに反映されることを検証する自動テストを導入することで、より堅牢なコンポーネント開発が可能になるだろう（これはIssue #41の「テストの必要性体感」というテーマにも繋がる）。
+
+この修正は、`2025/06/09` に実施した。
+
 *(ここに今後Three.jsについて学んだことを記述していきます。)*
 ---
 
