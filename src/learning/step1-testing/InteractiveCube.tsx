@@ -7,6 +7,7 @@ export const InteractiveCube: React.FC = () => {
     const cubeRef = useRef<THREE.Mesh>();
 
     const [cubeColor, setCubeColor] = useState<string>('green');
+    const [cubeSize, setCubeSize] = useState<number>(1.0);
 
     useEffect(() => {
         if(!canvasRef.current) {
@@ -102,14 +103,42 @@ export const InteractiveCube: React.FC = () => {
         
     }, [cubeColor]);
 
+    useEffect(() => {
+        if(!cubeRef.current){
+            return;
+        }
+
+        cubeRef.current.scale.setScalar(cubeSize);
+
+    }, [cubeSize]);
+
     return (
         <div style={{ width: '100%', height: '100%' }}>
-            <div style={{position: 'absolute', top: '10px', left: '10px', zIndex: 1000}}>
-                <button onClick={() => setCubeColor('green')}>緑</button>
-                <button onClick={() => setCubeColor('red')}>赤</button>
-                <button onClick={() => setCubeColor('blue')}>青</button>
-                <button onClick={() => setCubeColor('yellow')}>黄</button>
+            <div style={{position: 'absolute',
+                 top: '10px', 
+                 left: '10px', 
+                 zIndex: 1000}}>
+                <div>
+                    <button onClick={() => setCubeColor('green')}>緑</button>
+                    <button onClick={() => setCubeColor('red')}>赤</button>
+                    <button onClick={() => setCubeColor('blue')}>青</button>
+                    <button onClick={() => setCubeColor('yellow')}>黄</button>
+                </div>
+                <div style={{marginTop:'10px'}}>
+                    <span style={{color:'white'}}>
+                        サイズ: {cubeSize.toFixed(1)}
+                    </span>
+                    <input 
+                        type="range" 
+                        min="0.5" 
+                        max="3.0" 
+                        step="0.1"
+                        value={cubeSize}
+                        onChange={(e) => setCubeSize(parseFloat(e.target.value))}
+                    />
+                </div>
             </div>
+            
             <canvas ref={canvasRef} />
         </div>
         
