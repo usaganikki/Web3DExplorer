@@ -8,6 +8,7 @@ export const InteractiveCube: React.FC = () => {
 
     const [cubeColor, setCubeColor] = useState<string>('green');
     const [cubeSize, setCubeSize] = useState<number>(1.0);
+    const [cubePositionX, setCubePositionX] = useState<number>(0);
 
     useEffect(() => {
         if(!canvasRef.current) {
@@ -112,6 +113,15 @@ export const InteractiveCube: React.FC = () => {
 
     }, [cubeSize]);
 
+    useEffect(() => {
+        if(!cubeRef.current){
+            return;
+        }
+
+        cubeRef.current.position.x = cubePositionX;
+
+    }, [cubePositionX]);
+
     return (
         <div style={{ width: '100%', height: '100%' }}>
             <div style={{position: 'absolute',
@@ -135,6 +145,19 @@ export const InteractiveCube: React.FC = () => {
                         step="0.1"
                         value={cubeSize}
                         onChange={(e) => setCubeSize(parseFloat(e.target.value))}
+                    />
+                </div>
+                <div style={{marginTop:'10px'}}>
+                    <span style={{color:'white'}}>
+                        位置X: {cubePositionX.toFixed(1)}
+                    </span>
+                    <input 
+                        type="range" 
+                        min="-5" 
+                        max="5" 
+                        step="0.1"
+                        value={cubePositionX}
+                        onChange={(e) => setCubePositionX(parseFloat(e.target.value))}
                     />
                 </div>
             </div>

@@ -66,25 +66,27 @@ useEffect(() => {
 
 ### 2. インタラクティブな要素の追加と状態管理
 
-Issue #41 の目的である「手動テストの体験」の一環として、キューブの色やサイズをインタラクティブに変更する機能を実装する。この実装は、ReactのフックとThree.jsの連携を示す好例である。
+Issue #41 の目的である「手動テストの体験」の一環として、キューブの色やサイズ、X軸位置をインタラクティブに変更する機能を実装する。この実装は、ReactのフックとThree.jsの連携を示す好例である。
 
 #### 2.1. `useState` による状態の保持
 
-キューブの現在の色 (`cubeColor`) やサイズ (`cubeSize`) を管理するために、Reactの `useState` フックを利用する。
+キューブの現在の色 (`cubeColor`)、サイズ (`cubeSize`)、X軸位置 (`cubePositionX`) を管理するために、Reactの `useState` フックを利用する。
 
 ```typescript
 // InteractiveCube.tsx
 const [cubeColor, setCubeColor] = useState<string>('green');
 const [cubeSize, setCubeSize] = useState<number>(1.0);
+const [cubePositionX, setCubePositionX] = useState<number>(0); // X軸位置の状態を追加
 ```
 
 *   `useState<string>('green')` は、文字列型の状態 `cubeColor` を宣言し、初期値を `'green'` に設定する。
 *   `setCubeColor` は、`cubeColor` の値を更新するための関数である。この関数が呼び出されると、コンポーネントが再レンダリングされる。
 *   この分割代入 `[cubeColor, setCubeColor]` は、`useState` が返す配列（現在の状態値と更新関数）をそれぞれの変数に割り当てるJavaScriptの構文である。
+*   同様に、`cubeSize` はキューブのスケール値を、`cubePositionX` はX軸方向の位置を保持する状態変数である。
 
 #### 2.2. `useEffect` による状態変更の反映
 
-`cubeColor` や `cubeSize` の状態が変更された際に、実際にThree.jsのキューブのプロパティを更新するために `useEffect` フックを使用する。
+`cubeColor`、`cubeSize`、`cubePositionX` の状態が変更された際に、実際にThree.jsのキューブのプロパティを更新するために `useEffect` フックを使用する。
 
 ```typescript
 // InteractiveCube.tsx (色変更のuseEffect)
@@ -109,13 +111,24 @@ useEffect(() => {
     }
     cubeRef.current.scale.setScalar(cubeSize);
 }, [cubeSize]);
+
+// InteractiveCube.tsx (X軸位置変更のuseEffect)
+useEffect(() => {
+    if(!cubeRef.current){
+        return;
+    }
+    // cubeRef.current.position は THREE.Vector3 型のプロパティ
+    // .x でX軸の値を直接操作する
+    cubeRef.current.position.x = cubePositionX;
+}, [cubePositionX]); // cubePositionX が変更された時のみ実行
 ```
 
-*   依存配列に `[cubeColor]` や `[cubeSize]` を指定することで、それぞれの状態が変更されたときだけ対応するエフェクト関数が実行される。
+*   依存配列に各状態変数を指定することで、それぞれの状態が変更されたときだけ対応するエフェクト関数が実行される。
 *   `colorMap` は、状態として保持している色の名前を、Three.jsが要求する数値のカラーコードに変換するためのオブジェクトである。
     *   `{[Key: string]: number}` という型定義は、TypeScriptの**インデックスシグネチャ**であり、文字列キーと数値の値を持つオブジェクトであることを示す。
 *   型アサーション (`as THREE.MeshBasicMaterial`) を使用し、マテリアルの `color.setHex()` メソッドを呼び出して色を更新する。
 *   キューブの `scale.setScalar()` メソッドは、X, Y, Z軸のスケールを一律に設定する。
+*   キューブの `position.x` プロパティを直接更新することで、X軸方向の位置を変更する。
 
 #### 2.3. `useRef` によるThree.jsオブジェクトへのアクセス
 
@@ -144,7 +157,7 @@ cubeRef.current = cube;
 
 ### 1. JSXによるUIコントロールの追加
 
-キューブの色を変更するためのボタンや、サイズを変更するためのスライダーコントロールをJSXで実装する。
+キューブの色、サイズ、X軸位置を変更するためのUIコントロールをJSXで実装する。
 
 ```tsx
 // InteractiveCube.tsx の return 文 (一部抜粋)
@@ -178,13 +191,29 @@ return (
                     style={{ verticalAlign: 'middle', marginLeft: '5px' }}
                 />
             </div>
+
+            {/* X軸位置変更UIのグループ */}
+            <div style={{ marginTop: '10px' }}>
+                <span style={{ color: 'white' }}>
+                    位置X: {cubePositionX.toFixed(1)}
+                </span>
+                <input
+                    type="range"
+                    min="-5"
+                    max="5"
+                    step="0.1"
+                    value={cubePositionX}
+                    onChange={(e) => setCubePositionX(parseFloat(e.target.value))}
+                    style={{ verticalAlign: 'middle', marginLeft: '5px' }}
+                />
+            </div>
         </div>
         <canvas ref={canvasRef} style={{ width: '100%', height: '100%', display: 'block' }}/>
     </div>
 );
 ```
 *   ボタンの `onClick` イベントで `setCubeColor` を呼び出し、`cubeColor` の状態を更新する。
-*   `<input type="range">` を使用して、ユーザーが視覚的にサイズを選択できるようにする。`min`, `max`, `step` 属性でスライダーの挙動を制御し、`value` 属性で現在の状態と同期、`onChange` イベントで状態を更新する。
+*   `<input type="range">` を使用して、ユーザーが視覚的にサイズや位置を選択できるようにする。`min`, `max`, `step` 属性でスライダーの挙動を制御し、`value` 属性で現在の状態と同期、`onChange` イベントで状態を更新する。
 *   状態値を表示するテキスト (`<span>`) のスタイルを直接指定して、文字色を変更する。
 
 ### 2. CSSによる要素の重ね合わせとレイアウト調整
@@ -238,6 +267,6 @@ Issue #41 の主な目的は、この `InteractiveCube` コンポーネントを
 
 ## VI. まとめ
 
-`InteractiveCube.tsx` の実装とIssue #41の準備は、Three.jsにおけるCanvasのサイジング戦略の重要性、Reactのフック（`useState`, `useEffect`, `useRef`）を用いたインタラクティブな機能（色変更、サイズ変更）の実装、TypeScriptの型システム（インデックスシグネチャ、`useRef`の型推論）、JSXとCSSによるUI構築（コントロールの追加、要素の重ね合わせ、コンテナ内での順序配置、テキストスタイリング）とレイアウト調整について深い理解をもたらす。親要素のサイズに基づいてCanvasの寸法を決定すること、状態管理と副作用の適切な分離、そしてUI要素の配置とスタイリングは、より柔軟で再利用性の高いコンポーネント設計に不可欠である。また、単体テストの観点についても初期的な考察を行う。
+`InteractiveCube.tsx` の実装とIssue #41の準備は、Three.jsにおけるCanvasのサイジング戦略の重要性、Reactのフック（`useState`, `useEffect`, `useRef`）を用いたインタラクティブな機能（色変更、サイズ変更、X軸位置変更）の実装、TypeScriptの型システム（インデックスシグネチャ、`useRef`の型推論）、JSXとCSSによるUI構築（コントロールの追加、要素の重ね合わせ、コンテナ内での順序配置、テキストスタイリング）とレイアウト調整について深い理解をもたらす。親要素のサイズに基づいてCanvasの寸法を決定すること、状態管理と副作用の適切な分離、そしてUI要素の配置とスタイリングは、より柔軟で再利用性の高いコンポーネント設計に不可欠である。また、単体テストの観点についても初期的な考察を行う。
 
 これらの知見は、今後の開発に活かすものである。
