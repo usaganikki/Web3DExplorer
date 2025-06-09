@@ -99,8 +99,8 @@ export const InteractiveCube: React.FC = () => {
 
         const material = cubeRef.current.material as THREE.MeshBasicMaterial;
         material.color.setHex(colorMap[cubeColor]);
-        }
-    ), [cubeColor];
+        
+    }, [cubeColor]);
 
     return (
         <div style={{ width: '100%', height: '100%' }}>
