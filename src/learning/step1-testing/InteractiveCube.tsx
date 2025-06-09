@@ -1,9 +1,12 @@
-import React, {useRef, useEffect} from "react";
+import React, {useRef, useEffect, useState} from "react";
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls'
 
 export const InteractiveCube: React.FC = () => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
+    const cubeRef = useRef<THREE.Mesh>();
+
+    const [cubeColor, setCubeColor] = useState<string>('green');
 
     useEffect(() => {
         if(!canvasRef.current) {
@@ -37,6 +40,7 @@ export const InteractiveCube: React.FC = () => {
         });
 
         const cube = new THREE.Mesh(geometry, material);
+        cubeRef.current = cube;
 
         scene.add(cube);
 
@@ -81,5 +85,33 @@ export const InteractiveCube: React.FC = () => {
         };
     },[]);
 
-    return <canvas ref={canvasRef} />;
+    useEffect(() => {
+        if(!cubeRef.current){
+            return;
+        }
+
+        const colorMap: {[Key: string]: number} = {
+            'green': 0x00ff00,
+            'red': 0xff0000,
+            'blue': 0x0000ff,
+            'yellow': 0xffff00
+        };
+
+        const material = cubeRef.current.material as THREE.MeshBasicMaterial;
+        material.color.setHex(colorMap[cubeColor]);
+        }
+    ), [cubeColor];
+
+    return (
+        <div style={{ width: '100%', height: '100%' }}>
+            <div style={{position: 'absolute', top: '10px', left: '10px', zIndex: 1000}}>
+                <button onClick={() => setCubeColor('green')}>緑</button>
+                <button onClick={() => setCubeColor('red')}>赤</button>
+                <button onClick={() => setCubeColor('blue')}>青</button>
+                <button onClick={() => setCubeColor('yellow')}>黄</button>
+            </div>
+            <canvas ref={canvasRef} />
+        </div>
+        
+    );
 }
