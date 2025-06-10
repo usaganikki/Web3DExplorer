@@ -2,7 +2,7 @@
     "name": "web3d-explorer-learning",
     "version": "0.1.0",
     "description": "Learning exercises for Web3D Explorer with Three.js testing",
-  "type": "module",
+    "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
