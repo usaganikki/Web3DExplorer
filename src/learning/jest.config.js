@@ -6,12 +6,18 @@ export default {
       '<rootDir>/step*/**/*.(test|spec).(ts|tsx)'
     ],
     transform: {
-      '^.+\\.(ts|tsx)$': ['ts-jest', { 
+      '^.+\\.(ts|tsx|js|jsx)$': ['ts-jest', { 
         useESM: true, 
-        tsconfig: { jsx: 'react-jsx' } 
+        tsconfig: {
+          jsx: 'react-jsx',
+          allowJs: true 
+        } 
       }]
     },
-    moduleNameMapping: {
+    transformIgnorePatterns: [
+      '/node_modules/(?!three/examples/jsm/)',
+    ],
+    moduleNameMapper: {
       '^@/(.*)$': '<rootDir>/$1'
     },
     setupFilesAfterEnv: ['<rootDir>/jest.setup.js'],

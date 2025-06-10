@@ -18,12 +18,35 @@ export const InteractiveCube: React.FC = () => {
             return;
         }
 
+        const parentElement = canvasRef.current.parentElement;
+
+        if(!parentElement) {
+            console.error("InteractiveCube: canvasRef.current.parentElement is null. \
+                his should not happen in a normal browser environment or with typical RTL setup.");
+            return;
+        }
+
+        let width = parentElement!.clientWidth;
+        let height = parentElement!.clientHeight;
+
+        // jsdom環境でclientWidth/Heightが0になる場合へのフォールバック
+        if (width === 0) {
+            width = 500; // テスト用のデフォルト幅
+            console.warn(`InteractiveCube: parentElement.clientWidth is 0. \
+                Falling back to default width: ${width}`);
+        }
+        if (height === 0) {
+            height = 300; // テスト用のデフォルト高さ
+            console.warn(`InteractiveCube: parentElement.clientHeight is 0. \
+                Falling back to default height: ${height}`);
+        }
+
         // 1. Scene、Camera、Rendererの初期化
         const scene = new THREE.Scene();
 
         const camera = new THREE.PerspectiveCamera(
             75,
-            canvasRef.current.parentElement!.clientWidth / canvasRef.current.parentElement!.clientHeight,
+            width / height,
             0.1,
             1000
         )
@@ -32,8 +55,7 @@ export const InteractiveCube: React.FC = () => {
             canvas: canvasRef.current
         });
 
-        renderer.setSize(canvasRef.current.parentElement!.clientWidth
-            , canvasRef.current.parentElement!.clientHeight);
+        renderer.setSize(width, height);
 
         camera.position.z = 5;
 
@@ -76,11 +98,10 @@ export const InteractiveCube: React.FC = () => {
                 return;
             }
 
-            camera.aspect = canvasRef.current.parentElement!.clientWidth / canvasRef.current.parentElement!.clientHeight;
+            camera.aspect = width / height;
             camera.updateProjectionMatrix();
 
-            renderer.setSize(canvasRef.current.parentElement!.clientWidth
-            , canvasRef.current.parentElement!.clientHeight);
+            renderer.setSize(width, height);
         }
 
         window.addEventListener('resize', handleResize);
