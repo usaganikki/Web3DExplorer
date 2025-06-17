@@ -38,7 +38,39 @@ const mockContext = {
     shaderSource: jest.fn(),
     // シェーダーのソースを"取得"する関数。空文字列を返すようにする。
     getShaderSource: jest.fn().mockReturnValue(''),
+    getProgramInfoLog: jest.fn().mockReturnValue(''), 
+    getShaderInfoLog: jest.fn().mockReturnValue(''),
+    deleteShader: jest.fn(),  
+    // getProgramParameter の修正
+    getProgramParameter: jest.fn((program, pname) => { // jest.fn() の引数としてアロー関数を渡す
+      // pname は WebGL の定数 (数値)
+      // gl.LINK_STATUS や gl.ACTIVE_UNIFORMS など
+      if (pname === 35718) { // 35718 は gl.ACTIVE_UNIFORMS の値
+          return 0; // uniform変数の数を返す (0個でOK)
+      }
+      if (pname === 35714) { // 35714 は gl.LINK_STATUS の値
+          return true;
+      }
+      return null;
+    }),
+
+    // getActiveUniform の追加
+    getActiveUniform: jest.fn((program, index) => { // jest.fn() の引数としてアロー関数を渡す
+        return {
+            name: 'mockUniform',
+            type: 0x8b5b, // gl.FLOAT_VEC3
+            size: 1
+        };
+    }),
     
+    depthMask: jest.fn(),
+    colorMask: jest.fn(),
+    disable: jest.fn(),
+    createVertexArray: jest.fn(),
+    bindVertexArray: jest.fn(),
+    drawElements: jest.fn(),
+    deleteVertexArray: jest.fn(),
+
     // 今後必要になりそうな関数を先回りして追加
     createTexture: jest.fn(),
     bindTexture: jest.fn(),
@@ -61,8 +93,7 @@ const mockContext = {
     frontFace: jest.fn(),
     cullFace: jest.fn(),
     getContextAttributes: jest.fn(),
-    stencilMask: jest.fn(),
-    getProgramInfoLog: jest.fn()
+    stencilMask: jest.fn()
   };
   
   // `getContext`が、上記で定義した偽コンテキストを返すように設定

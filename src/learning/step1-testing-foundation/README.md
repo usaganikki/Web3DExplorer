@@ -91,13 +91,18 @@ Jestがテストファイルとして認識するファイルのパターン。`
 
 #### 2.5. `transform` (TypeScriptとJSXのトランスパイル)
 指定されたファイルをJestが理解できる形に変換する方法を定義する。
-*   **トランスコンパイルとは:** あるソースコードを別のソースコード（または同じ言語の異なるバージョン）に変換すること。TypeScriptからJavaScriptへの変換や、新しいJS構文から古いJS構文への変換など。
-*   `'^.+\\.(ts|tsx)$': ['ts-jest', { useESM: true, tsconfig: { jsx: 'react-jsx' } }]`:
-    *   `.ts` および `.tsx` ファイルを `ts-jest` を使ってトランスパイルする。
-    *   `useESM: true`: トランスパイル後のJavaScriptがES Modules形式になるようにする。
-    *   `tsconfig: { jsx: 'react-jsx' }`: JSXの変換方式をReact 17+の新しい方式に設定。
+*   `'^.+\\.(ts|tsx|js|jsx)$': ['ts-jest', { ... }]`:
+    *   **変更点**: 以前は `.ts` と `.tsx` のみを対象としていたが、`.js` と `.jsx` も `ts-jest` で処理するように拡張された。これにより、ESM形式で書かれたJavaScriptモジュール（例: `three/examples/jsm`）も適切にトランスパイル対象となる。
+    *   `tsconfig: { ..., allowJs: true }`: `ts-jest` が `.js` ファイルを処理できるようにするための設定。
 
-#### 2.6. `moduleNameMapper` (パスエイリアス)
+#### 2.6. `transformIgnorePatterns` (トランスパイル除外設定の変更)
+Jestはデフォルトで `node_modules` 内のファイルをトランスパイルしない。しかし、`three.js` の `examples/jsm` ディレクトリ配下のモジュールは、ESM形式で配布されており、Jest (Node.js) が直接解釈できない構文を含んでいる場合がある。
+*   `'/node_modules/(?!three/examples/jsm/)'`:
+    *   これは「否定先読み」という正規表現のテクニック。
+    *   「`node_modules/` ディレクトリにあるモジュールのうち、**`three/examples/jsm/` を除くすべて**のモジュールをトランスパイルから**除外**する」という意味になる。
+    *   結果として、`three/examples/jsm/` 配下のモジュールだけが `transform` の対象となり、`ts-jest` によってJestが解釈できる形式に変換される。`OrbitControls` などを `import` する際に発生する構文エラーを回避するために不可欠な設定。
+
+#### 2.7. `moduleNameMapper` (パスエイリアス)
 モジュールインポート時のパス解決ルールを定義する。
 *   `'^@/(.*)$': '<rootDir>/$1'`:
     *   正規表現を使用。`^@/` で始まるパス（例: `@/components/Button`）にマッチ。
@@ -157,13 +162,38 @@ global.HTMLCanvasElement.prototype.getContext = jest.fn().mockReturnValue(mockCo
 ```
 
 ##### c. モック作成のデバッグプロセス（モグラたたき）
-Three.jsが要求する関数は多岐にわたるため、一度に完璧なモックを作るのは難しい。実際には、以下のようなプロセスで段階的にモックを構築した。
-1.  テストを実行し、エラーメッセージを確認する (例: `gl.getExtension is not a function`)。
-2.  エラーの原因となっている関数（この場合は `getExtension`）を特定する。
-3.  `mockContext` オブジェクトに、その関数を `jest.fn()` として追加する。
-4.  再度テストを実行し、次のエラーに進む。
-この試行錯誤を繰り返すことで、`WebGLRenderer` の初期化と初回レンダリングをパスするのに十分なモックが完成する。このプロセスは、ライブラリの内部動作を理解する上で非常に有益な学習体験となる。
+Three.jsが要求する関数は多岐にわたるため、一度に完璧なモックを作るのは難しい。実際には、テスト実行とエラー確認を繰り返すことで、`WebGLRenderer` の初期化と初回レンダリングをパスするのに十分なモックを段階的に構築した。このプロセスは、ライブラリの内部動作を理解する上で非常に有益な学習体験となる。
 
 ##### d. VSCodeの補完と実行環境のギャップ
 開発中、`global.` と入力するとVSCodeが `WebGLRenderingContext` をサジェストすることがある。これは、`tsconfig.json` の `"lib": ["DOM"]` 設定に基づき、VSCodeがブラウザ環境の型定義を読み込んでいるためである。
 これはあくまで**開発時の支援機能**であり、**実行時のJest (Node.js) 環境**にそのオブジェクトが実際に存在するわけではない。この「開発環境の知識」と「実行環境の現実」のギャップを埋めるのが、`jest.setup.js`でのモックの役割である。
+
+##### e. 主要なWebGLモック関数の役割とデバッグ事例 (更新)
+`mockContext` に追加した各モック関数は、`THREE.WebGLRenderer` の初期化シーケンスにおける特定のステップをパスするために重要な役割を果たしている。以下に、デバッグ過程で遭遇した代表的なエラーと、それに対応するモック関数の役割を詳述する。
+
+*   **`getShaderPrecisionFormat`**:
+    *   **役割**: シェーダーで使われる数値（浮動小数点数や整数）の精度情報を取得する。
+    *   **モック**: Three.jsが期待する `{ rangeMin, rangeMax, precision }` 形式のオブジェクトを返すことで、精度チェックをパスさせる。
+
+*   **`getShaderInfoLog` / `getProgramInfoLog`**:
+    *   **役割**: シェーダーのコンパイルやプログラムのリンクが失敗した際に、エラーログ（文字列）を取得する。
+    *   **エラー**: これらの関数が `undefined` を返すと、Three.js内部で `.trim()` を呼び出そうとし、`TypeError: Cannot read properties of undefined (reading 'trim')` が発生した。
+    *   **モック**: `jest.fn().mockReturnValue('')` のように空文字列を返すことで、処理が「成功した」と偽装する。
+
+*   **`getProgramParameter`**:
+    *   **役割**: シェーダープログラムに関する様々な情報を取得する。引数によって問い合わせる内容が変わる。
+        *   `gl.LINK_STATUS`: プログラムのリンクが成功したか (`true`/`false`)。
+        *   `gl.ACTIVE_UNIFORMS`: プログラム内にいくつの `uniform` 変数があるか（数値）。
+    *   **エラー**: `uniform` 変数の数を問い合わせた際に `undefined` が返ると、後続の処理でエラーとなる。
+    *   **モック**: `jest.fn((program, pname) => { ... })` のように、引数 `pname` の値に応じて返す値を動的に変更する。`LINK_STATUS` には `true` を、`ACTIVE_UNIFORMS` には `0` を返すことで、処理を安全に進める。
+
+*   **`getActiveUniform`**:
+    *   **役割**: シェーダープログラム内で有効な `uniform` 変数の詳細情報（名前、型、サイズを含むオブジェクト）を取得する。
+    *   **エラー**: この関数が `undefined` を返すと、Three.jsが返り値オブジェクトの `.name` プロパティにアクセスしようとして `TypeError: Cannot read properties of undefined (reading 'name')` が発生した。
+    *   **モック**: `getProgramParameter` が `uniform` の数を `0` と返すため、この関数は実際には呼ばれないはずだが、将来的な変更に備えて、`{ name: 'mockUniform', type: ..., size: ... }` という形式のダミーオブジェクトを返すように実装し、テストの堅牢性を高めている。
+
+*   **その他の関数 (`createShader`, `compileShader`, `attachShader`, `linkProgram` など)**:
+    *   **役割**: これらはシェーダーのライフサイクル（作成、ソースコード設定、コンパイル、プログラムへのアタッチ、リンク）を管理する一連の関数である。
+    *   **モック**: 今回のテストでは、これらの処理が成功したかのように見せかけるだけでよく、具体的な実装は不要なため、`jest.fn()` で空の関数として定義している。これにより、`... is not a function` というエラーを回避している。
+
+これらのデバッグ経験を通じて、`WebGLRenderer` の初期化プロセスは、単に関数が存在するだけでなく、各関数が期待されるデータ型や構造の値を返すことに依存していることが深く理解できた。テスト環境におけるモック作成は、対象ライブラリの内部APIとの対話であり、その要求仕様を一つずつ満たしていく地道な作業である。
