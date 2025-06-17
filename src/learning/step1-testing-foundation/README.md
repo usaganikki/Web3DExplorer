@@ -125,14 +125,45 @@ Jestがテストファイルとして認識するファイルのパターン。`
 
 ### 2. `src/learning/jest.setup.js` の詳細解説
 
+#### 2.1. `@testing-library/jest-dom` のインポート
 ```javascript
-// src/learning/jest.setup.js
 import '@testing-library/jest-dom';
+```
+`@testing-library/jest-dom` ライブラリをインポートする。これにより、Jestの `expect` にDOM要素の状態を検証するための便利なカスタムマッチャー（例: `toBeInTheDocument()`, `toBeVisible()`, `toHaveTextContent()` など）が追加され、DOMテストの記述が容易になる。
 
-// Three.js用のWebGL mockingは後で必要に応じて追加
+#### 2.2. WebGL APIのモック (Issue #44)
+Three.jsの `WebGLRenderer` は、ブラウザが提供するWebGL APIを必要とする。しかし、テスト環境である `jsdom` はWebGLをサポートしていないため、そのままでは `new THREE.WebGLRenderer()` を呼び出した時点でエラーが発生する。
+この問題を解決するため、`jest.setup.js` を利用して、テスト実行前にWebGL関連のAPIをグローバルにモック（偽の関数やオブジェクトに置き換え）する。
+
+##### a. なぜモックが必要か？
+- **環境の差異**: `jsdom` はDOM APIをシミュレートするが、GPUと連携するWebGL APIは持たない。
+- **Three.jsの要求**: `WebGLRenderer` は、初期化時に `canvas.getContext('webgl')` を呼び出し、返されたコンテキストオブジェクトの様々な関数（`getExtension`, `getParameter` など）を実行しようとする。
+- **エラーの回避**: これらの関数が存在しないとエラーになるため、テストコードが先に進めない。我々のテストはDOMの存在確認が目的であり、実際の描画は不要なため、これらのAPI呼び出しを「空振り」させることでエラーを回避する。
+
+##### b. `global` オブジェクトとモックの実装
+Node.js環境におけるグローバルスコープは `global` オブジェクト（ブラウザの `window` に相当）である。ここにプロパティを追加・変更することで、テスト環境全体に影響を与えられる。
+
+```javascript
+// `global`に、ブラウザ環境なら存在するはずの`WebGLRenderingContext`を定義
+global.WebGLRenderingContext = jest.fn();
+
+// canvas.getContextが、Three.jsが必要とする関数群を持つ偽のオブジェクトを返すように設定
+const mockContext = {
+  getExtension: jest.fn(),
+  getParameter: jest.fn().mockReturnValue([]),
+  // ...その他多数のモック関数
+};
+global.HTMLCanvasElement.prototype.getContext = jest.fn().mockReturnValue(mockContext);
 ```
 
-*   `import '@testing-library/jest-dom';`:
-    `@testing-library/jest-dom` ライブラリをインポート。これにより、Jestの `expect` にDOM要素の状態を検証するための便利なカスタムマッチャー（例: `toBeInTheDocument()`, `toBeVisible()`, `toHaveTextContent()` など）が追加され、DOMテストの記述が容易になる。
-*   `// Three.js用のWebGL mockingは後で必要に応じて追加`:
-    将来的にThree.jsのテストでWebGL関連機能のモックが必要になる可能性を示唆するコメント。jsdomは完全なWebGLをサポートしないため、より高度なテストではモック化が検討される。
+##### c. モック作成のデバッグプロセス（モグラたたき）
+Three.jsが要求する関数は多岐にわたるため、一度に完璧なモックを作るのは難しい。実際には、以下のようなプロセスで段階的にモックを構築した。
+1.  テストを実行し、エラーメッセージを確認する (例: `gl.getExtension is not a function`)。
+2.  エラーの原因となっている関数（この場合は `getExtension`）を特定する。
+3.  `mockContext` オブジェクトに、その関数を `jest.fn()` として追加する。
+4.  再度テストを実行し、次のエラーに進む。
+この試行錯誤を繰り返すことで、`WebGLRenderer` の初期化と初回レンダリングをパスするのに十分なモックが完成する。このプロセスは、ライブラリの内部動作を理解する上で非常に有益な学習体験となる。
+
+##### d. VSCodeの補完と実行環境のギャップ
+開発中、`global.` と入力するとVSCodeが `WebGLRenderingContext` をサジェストすることがある。これは、`tsconfig.json` の `"lib": ["DOM"]` 設定に基づき、VSCodeがブラウザ環境の型定義を読み込んでいるためである。
+これはあくまで**開発時の支援機能**であり、**実行時のJest (Node.js) 環境**にそのオブジェクトが実際に存在するわけではない。この「開発環境の知識」と「実行環境の現実」のギャップを埋めるのが、`jest.setup.js`でのモックの役割である。
