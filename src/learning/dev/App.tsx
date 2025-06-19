@@ -1,5 +1,5 @@
 import React from 'react';
-import { InteractiveCube } from '@/learning/step1-testing-foundation/InteractiveCube'
+import { InteractiveCube } from '../step1-testing/InteractiveCube'
 
 const App: React.FC = () => {
   return (
