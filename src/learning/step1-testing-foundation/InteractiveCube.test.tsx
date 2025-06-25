@@ -20,6 +20,24 @@ describe('InteractiveCube', () => {
         changeColorAndVerify(buttons.red);
     });
 
+    test('全色ボタンの連続操作テスト', () => {
+        const { buttons } = setupInteractiveCubeTest();
+
+        changeColorAndVerify(buttons.green);
+        changeColorAndVerify(buttons.blue);
+        changeColorAndVerify(buttons.red);
+        changeColorAndVerify(buttons.yellow);
+    });
+
+    test('同じ色ボタンを連続クリックしても安定動作する', () => {
+        const { buttons } = setupInteractiveCubeTest();
+
+        changeColorAndVerify(buttons.green);
+        changeColorAndVerify(buttons.green);
+        changeColorAndVerify(buttons.green);
+        changeColorAndVerify(buttons.green);
+    });
+
     test('サイズスライダーの操作後、表示される値が更新される', async () => {
         const { sliders } = setupInteractiveCubeTest();
         await changeSliderAndVerifyDisplay(sliders.size, '2.5', 'サイズ: 2.5');
@@ -47,8 +65,24 @@ describe('InteractiveCube', () => {
         await changeSliderAndVerifyDisplay(sliders.size, '3.0', 'サイズ: 3.0');
     });
 
-    // InteractiveCube.test.tsx に追加するテストコード案
+    test('回転速度スライダーの精度境界値テスト', async () => {
+        const { sliders } = setupInteractiveCubeTest();
+        
+        // 最小精度での動作確認
+        await changeSliderAndVerifyDisplay(sliders.rotation, '0.001', '回転速度: 0.00');
+        await changeSliderAndVerifyDisplay(sliders.rotation, '0.01', '回転速度: 0.01'); 
+        await changeSliderAndVerifyDisplay(sliders.rotation, '0.1', '回転速度: 0.10');
+    });
 
+    test('回転速度スライダーの実用値テスト', async () => {
+        const { sliders } = setupInteractiveCubeTest();
+        
+        // 実際に使用されそうな値での確認
+        await changeSliderAndVerifyDisplay(sliders.rotation, '0.005', '回転速度: 0.01');
+        await changeSliderAndVerifyDisplay(sliders.rotation, '0.025', '回転速度: 0.03');
+        await changeSliderAndVerifyDisplay(sliders.rotation, '0.075', '回転速度: 0.07');
+    });
+    
     test('複数のスライダーとボタンを連続して操作しても、各状態が正しく保たれる', async () => {
         const { sliders, buttons } = setupInteractiveCubeTest();
     
@@ -67,10 +101,46 @@ describe('InteractiveCube', () => {
         expect(screen.getByText("サイズ: 2.0")).toBeInTheDocument();
     });
 
-    // TODO CanvasからCubeが取得できないのでCubeの色変更などの結果のテストができない
-    // test('赤色ボタンをクリックすると、Three.jsキューブのmaterial.colorが赤に変わる', () => {
+    // ========================================
+    // 基本的なエッジケーステスト
+    // ========================================
+    test('スライダーがブラウザによって範囲制限される', () => {
+        const { sliders } = setupInteractiveCubeTest();
 
-    // });
+        // 範囲外値でのテスト
+        fireEvent.change(sliders.size, { target: { value: '999' } });
+        // ブラウザがmax="3.0"で自動制限することを確認
+        expect(parseFloat(sliders.size.value)).toBeLessThanOrEqual(3.0);
+        
+        fireEvent.change(sliders.size, { target: { value: '-999' } });
+        // ブラウザがmin="0.5"で自動制限することを確認  
+        expect(parseFloat(sliders.size.value)).toBeGreaterThanOrEqual(0.5);
+    });
 
+    test('スライダーに無効な文字列を入力しても安全に動作する', () => {
+        const { sliders } = setupInteractiveCubeTest();
+
+        // 文字列入力テスト
+        fireEvent.change(sliders.size, { target: { value: 'abc' } });
+        expect(
+            () => {
+                expect(screen.getByText(/サイズ:/)).toBeInTheDocument();
+            }
+        ).not.toThrow();
+    });
+
+
+    test('スライダーを高速で操作しても安定している', () => {
+        const { sliders } = setupInteractiveCubeTest();
+
+        for (let i =0; i < 5; i++) {
+            const value = (Math.random() * 2.5 + 0.5).toFixed(1);
+            fireEvent.change(sliders.size, { target: { value } });
+        }
+
+        const finalValue = parseFloat(sliders.size.value);
+        expect(finalValue).toBeGreaterThanOrEqual(0.5);
+        expect(finalValue).toBeLessThanOrEqual(3.0);
+    });
   
 })
