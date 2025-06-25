@@ -1,0 +1,36 @@
+{
+  "name": "phase1-research",
+  "version": "1.0.0",
+  "description": "このディレクトリは、Three.jsのCanvas描画テスト手法を調査・PoC実装するための基盤環境です。",
+  "main": "jest.config.js",
+  "directories": {
+    "doc": "docs",
+    "test": "tests"
+  },
+  "scripts": {
+    "test": "jest --config jest.config.js",
+    "test:watch": "jest --config jest.config.js --watch",
+    "test:verbose": "jest --config jest.config.js --verbose"
+  },
+  "keywords": ["three.js", "testing", "canvas", "webgl", "jest"],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@testing-library/jest-dom": "^6.0.0",
+    "@testing-library/react": "^14.0.0",
+    "jest": "^29.0.0",
+    "jest-environment-jsdom": "^29.0.0"
+  },
+  "peerDependencies": {
+    "three": "^0.163.0"
+  },
+  "notes": {
+    "removed-packages": [
+      "canvas - Phase1ではMock環境で十分、Phase2以降で追加",
+      "puppeteer - ブラウザテストはPhase2以降で追加", 
+      "playwright - ブラウザテストはPhase2以降で追加",
+      "pixelmatch - 画像比較はPhase2以降で追加",
+      "resemblejs - 画像比較はPhase2以降で追加"
+    ]
+  }
+}
