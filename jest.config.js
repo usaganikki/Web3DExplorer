@@ -14,8 +14,8 @@ export default {
   preset: 'ts-jest/presets/default-esm',
   testEnvironment: 'jsdom',
   testMatch: [
-    '<rootDir>/__tests__/**/*.(ts|tsx)', // TypeScriptのテストファイルに限定
-    '<rootDir>/src/**/*.(test|spec).(ts|tsx)' // TypeScriptのテストファイルに限定
+    '<rootDir>/tests/**/*.test.ts', // testsフォルダ下の全てのTypeScriptテストファイル
+    '<rootDir>/tests/**/*.test.tsx' // testsフォルダ下の全てのTypeScript Reactテストファイル
   ],
   transform: commonEsmTransform,
   moduleNameMapper: {
