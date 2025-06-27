@@ -14,7 +14,7 @@ import * as THREE from 'three';
 // テスト対象のコンポーネント
 import SimpleCube from '@/components/SimpleCube';
 
-// Three.jsを自動モック - tests/__mocks__/three.jsが自動的に使用される
+// Three.jsを自動モック - tests/__mocks__/three.tsが自動的に使用される
 jest.mock('three');
 
 describe('SimpleCube Component', () => {

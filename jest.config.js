@@ -1,4 +1,5 @@
 // jest.config.js (ルート)
+/** @type {import('@jest/types').Config.InitialOptions} */
 const commonEsmTransform = {
   '^.+\\.(ts|tsx)$': ['ts-jest', { 
     useESM: true, 
@@ -21,7 +22,8 @@ const rootTransformIgnorePatterns = [
   'node_modules/(?!(some-esm-pkg-for-root)/)' // 必要に応じて設定
 ];
 
-export default {
+/** @type {import('@jest/types').Config.InitialOptions} */
+const config = {
   displayName: 'root-tests',
   preset: 'ts-jest/presets/default-esm',
   testEnvironment: 'jsdom',
@@ -44,7 +46,7 @@ export default {
   },
   setupFilesAfterEnv: [
     'jest-canvas-mock',
-    '<rootDir>/jest.setup.ts',
+    '<rootDir>/jest.setup.js',
     '<rootDir>/tests/setup.ts'
   ],
   extensionsToTreatAsEsm: ['.ts', '.tsx'],
@@ -61,3 +63,5 @@ export default {
   moduleDirectories: ['node_modules', '<rootDir>/'],
   roots: ['<rootDir>/src/', '<rootDir>/tests/'],
 };
+
+export default config;
