@@ -26,7 +26,7 @@ export const Scene = jest.fn(function(): Partial<THREE.Scene> {
       }
       return this;
     }),
-    getObjectByName: jest.fn(() => null),
+    getObjectByName: jest.fn(() => undefined),
     traverse: jest.fn(function(this: any, callback: (object: THREE.Object3D) => void) {
       callback(this);
       this.children.forEach((child: any) => {
@@ -39,7 +39,7 @@ export const Scene = jest.fn(function(): Partial<THREE.Scene> {
     rotation: new (Vector3 as any)(0, 0, 0),
     scale: new (Vector3 as any)(1, 1, 1),
     visible: true,
-    type: 'Scene',
+    type: 'Scene' as const,
     name: '',
     background: null,
     fog: null,
@@ -74,7 +74,7 @@ export const PerspectiveCamera = jest.fn(function(
       return this;
     }),
     updateMatrixWorld: jest.fn(),
-    getWorldDirection: jest.fn(() => ({ x: 0, y: 0, z: -1 })),
+    getWorldDirection: jest.fn(() => new (Vector3 as any)(0, 0, -1)),
     type: 'PerspectiveCamera',
     fov,
     aspect,
@@ -110,7 +110,7 @@ export const OrthographicCamera = jest.fn(function(
       return this;
     }),
     updateMatrixWorld: jest.fn(),
-    getWorldDirection: jest.fn(() => ({ x: 0, y: 0, z: -1 })),
+    getWorldDirection: jest.fn(() => new (Vector3 as any)(0, 0, -1)),
     type: 'OrthographicCamera',
     left,
     right,
@@ -130,16 +130,26 @@ export const OrthographicCamera = jest.fn(function(
 export const WebGLRenderer = jest.fn((
   options: THREE.WebGLRendererParameters = {}
 ): Partial<THREE.WebGLRenderer> => ({
-  domElement: options.canvas || document.createElement('canvas'),
+  domElement: (options.canvas as HTMLCanvasElement) || document.createElement('canvas'),
   setSize: jest.fn(),
   setPixelRatio: jest.fn(),
   setClearColor: jest.fn(),
   render: jest.fn(),
   dispose: jest.fn(),
-  getContext: jest.fn(() => ({})),
-  getSize: jest.fn(() => ({ width: 800, height: 600 })),
+  getContext: jest.fn(() => ({} as WebGLRenderingContext)),
+  getSize: jest.fn((target: THREE.Vector2) => {
+    target.x = 800;
+    target.y = 600;
+    return target;
+  }),
   setViewport: jest.fn(),
-  getViewport: jest.fn(() => ({ x: 0, y: 0, z: 800, w: 600 })),
+  getViewport: jest.fn((target: THREE.Vector4) => {
+    target.x = 0;
+    target.y = 0;
+    target.z = 800;
+    target.w = 600;
+    return target;
+  }),
   clear: jest.fn(),
   clearColor: jest.fn(),
   clearDepth: jest.fn(),
@@ -147,7 +157,11 @@ export const WebGLRenderer = jest.fn((
   shadowMap: {
     enabled: false,
     type: 'PCFShadowMap' as any,
-  },
+    autoUpdate: true,
+    needsUpdate: false,
+    render: jest.fn(),
+    cullFace: 'CullFaceBack' as any,
+  } as any,
   outputColorSpace: 'srgb' as any,
   toneMapping: 'NoToneMapping' as any,
   toneMappingExposure: 1,
