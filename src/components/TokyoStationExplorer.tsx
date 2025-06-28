@@ -234,6 +234,7 @@ export const TokyoStationExplorer: React.FC<TokyoStationExplorerProps> = ({
       }
       
     } catch (error) {
+      // eslint-disable-next-line no-console
       console.error('Error setting up Tokyo Station scene:', error);
       setError(error instanceof Error ? error.message : 'Unknown error');
       setIsLoading(false);

@@ -27,7 +27,6 @@ const mockContext = {
     createProgram: jest.fn(),
     attachShader: jest.fn(),
     linkProgram: jest.fn(),
-    getProgramParameter: jest.fn(() => true), // リンク成功を偽装
     useProgram: jest.fn(),
     
     // 描画関連の基本的な関数
@@ -35,7 +34,6 @@ const mockContext = {
     clearColor: jest.fn(),
     viewport: jest.fn(),
   
-    shaderSource: jest.fn(),
     // シェーダーのソースを"取得"する関数。空文字列を返すようにする。
     getShaderSource: jest.fn().mockReturnValue(''),
     getProgramInfoLog: jest.fn().mockReturnValue(''), 

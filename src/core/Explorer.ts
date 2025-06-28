@@ -41,6 +41,7 @@ export class Explorer extends EventEmitter implements IWeb3DExplorer { // Use al
     this.stats = this.createInitialStats();
     
     if (this.config.debug) {
+      // eslint-disable-next-line no-console
       console.log('Web3DExplorer initialized', this.config);
     }
   }
@@ -162,6 +163,7 @@ export class Explorer extends EventEmitter implements IWeb3DExplorer { // Use al
         break;
         
       default:
+        // eslint-disable-next-line no-console
         console.warn(`Unsupported light type: ${type}`);
         return null;
     }
