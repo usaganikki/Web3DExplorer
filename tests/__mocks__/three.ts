@@ -63,11 +63,19 @@ export const PerspectiveCamera = jest.fn(function(
     rotation: new (Vector3 as any)(0, 0, 0),
     quaternion: { x: 0, y: 0, z: 0, w: 1 } as any,
     up: { x: 0, y: 1, z: 0 } as any,
-    lookAt: jest.fn(function(this: any, x: number, y: number, z: number) {
-      // Simple lookAt implementation for testing
-      this.position.set(this.position.x, this.position.y, this.position.z);
+    lookAt: jest.fn(function(this: any, ...args: any[]) {
+      // Support both Vector3 and (x,y,z) overloads for Three.js compatibility
+      if (args.length === 1) {
+        // Vector3 overload: lookAt(vector)
+        const vector = args[0];
+        return this;
+      } else if (args.length === 3) {
+        // Coordinate overload: lookAt(x, y, z)
+        const [x, y, z] = args;
+        return this;
+      }
       return this;
-    }),
+    }) as any,
     updateProjectionMatrix: jest.fn(function(this: any) {
       // Update projectionMatrix when called
       this.projectionMatrix = this.projectionMatrix || new (Matrix4 as any)();
@@ -101,10 +109,19 @@ export const OrthographicCamera = jest.fn(function(
     rotation: new (Vector3 as any)(0, 0, 0),
     quaternion: { x: 0, y: 0, z: 0, w: 1 } as any,
     up: { x: 0, y: 1, z: 0 } as any,
-    lookAt: jest.fn(function(this: any, x: number, y: number, z: number) {
-      this.position.set(this.position.x, this.position.y, this.position.z);
+    lookAt: jest.fn(function(this: any, ...args: any[]) {
+      // Support both Vector3 and (x,y,z) overloads for Three.js compatibility
+      if (args.length === 1) {
+        // Vector3 overload: lookAt(vector)
+        const vector = args[0];
+        return this;
+      } else if (args.length === 3) {
+        // Coordinate overload: lookAt(x, y, z)
+        const [x, y, z] = args;
+        return this;
+      }
       return this;
-    }),
+    }) as any,
     updateProjectionMatrix: jest.fn(function(this: any) {
       this.projectionMatrix = this.projectionMatrix || new (Matrix4 as any)();
       return this;
@@ -165,14 +182,16 @@ export const WebGLRenderer = jest.fn((
   outputColorSpace: 'srgb' as any,
   toneMapping: 'NoToneMapping' as any,
   toneMappingExposure: 1,
-  antialias: options.antialias || false,
 }));
 
 // Geometry constructor mocks
 export const BoxGeometry = jest.fn(function(
   width: number = 1, 
   height: number = 1, 
-  depth: number = 1
+  depth: number = 1,
+  widthSegments: number = 1,
+  heightSegments: number = 1,
+  depthSegments: number = 1
 ): Partial<THREE.BoxGeometry> {
   const instance = {
     attributes: {
@@ -187,7 +206,14 @@ export const BoxGeometry = jest.fn(function(
     computeBoundingSphere: jest.fn(),
     dispose: jest.fn(),
     type: 'BoxGeometry',
-    parameters: { width, height, depth },
+    parameters: { 
+      width, 
+      height, 
+      depth, 
+      widthSegments, 
+      heightSegments, 
+      depthSegments 
+    } as any,
   };
   Object.setPrototypeOf(instance, BoxGeometry.prototype);
   return instance;
@@ -196,7 +222,11 @@ export const BoxGeometry = jest.fn(function(
 export const SphereGeometry = jest.fn(function(
   radius: number = 1, 
   widthSegments: number = 32, 
-  heightSegments: number = 16
+  heightSegments: number = 16,
+  phiStart: number = 0,
+  phiLength: number = Math.PI * 2,
+  thetaStart: number = 0,
+  thetaLength: number = Math.PI
 ): Partial<THREE.SphereGeometry> {
   const instance = {
     attributes: {
@@ -211,7 +241,15 @@ export const SphereGeometry = jest.fn(function(
     computeBoundingSphere: jest.fn(),
     dispose: jest.fn(),
     type: 'SphereGeometry',
-    parameters: { radius, widthSegments, heightSegments },
+    parameters: { 
+      radius, 
+      widthSegments, 
+      heightSegments, 
+      phiStart, 
+      phiLength, 
+      thetaStart, 
+      thetaLength 
+    } as any,
   };
   Object.setPrototypeOf(instance, SphereGeometry.prototype);
   return instance;
@@ -219,7 +257,9 @@ export const SphereGeometry = jest.fn(function(
 
 export const PlaneGeometry = jest.fn(function(
   width: number = 1, 
-  height: number = 1
+  height: number = 1,
+  widthSegments: number = 1,
+  heightSegments: number = 1
 ): Partial<THREE.PlaneGeometry> {
   const instance = {
     attributes: {
@@ -234,7 +274,12 @@ export const PlaneGeometry = jest.fn(function(
     computeBoundingSphere: jest.fn(),
     dispose: jest.fn(),
     type: 'PlaneGeometry',
-    parameters: { width, height },
+    parameters: { 
+      width, 
+      height, 
+      widthSegments, 
+      heightSegments 
+    } as any,
   };
   Object.setPrototypeOf(instance, PlaneGeometry.prototype);
   return instance;
@@ -244,7 +289,11 @@ export const CylinderGeometry = jest.fn(function(
   radiusTop: number = 1,
   radiusBottom: number = 1,
   height: number = 1,
-  radialSegments: number = 32
+  radialSegments: number = 32,
+  heightSegments: number = 1,
+  openEnded: boolean = false,
+  thetaStart: number = 0,
+  thetaLength: number = Math.PI * 2
 ): Partial<THREE.CylinderGeometry> {
   const instance = {
     attributes: {
@@ -259,7 +308,16 @@ export const CylinderGeometry = jest.fn(function(
     computeBoundingSphere: jest.fn(),
     dispose: jest.fn(),
     type: 'CylinderGeometry',
-    parameters: { radiusTop, radiusBottom, height, radialSegments },
+    parameters: { 
+      radiusTop, 
+      radiusBottom, 
+      height, 
+      radialSegments, 
+      heightSegments, 
+      openEnded, 
+      thetaStart, 
+      thetaLength 
+    } as any,
   };
   Object.setPrototypeOf(instance, CylinderGeometry.prototype);
   return instance;
@@ -435,6 +493,79 @@ export const PointLight = jest.fn(function(
     type: 'PointLight',
   };
   Object.setPrototypeOf(instance, PointLight.prototype);
+  return instance;
+});
+
+// Vector2 mock for getSize compatibility
+export const Vector2 = jest.fn(function(
+  x: number = 0, 
+  y: number = 0
+): Partial<THREE.Vector2> {
+  const instance = {
+    x, y,
+    width: x, // Alias for compatibility
+    height: y, // Alias for compatibility
+    isVector2: true as const,
+    
+    set: jest.fn(function(this: any, newX: number, newY: number) {
+      this.x = newX; this.y = newY;
+      this.width = newX; this.height = newY;
+      return this;
+    }),
+    
+    copy: jest.fn(function(this: any, v: THREE.Vector2) {
+      this.x = v.x; this.y = v.y;
+      this.width = v.x; this.height = v.y;
+      return this;
+    }),
+    
+    clone: jest.fn(function(this: any) { 
+      return new (Vector2 as any)(this.x, this.y); 
+    }),
+    
+    add: jest.fn(function(this: any, v: THREE.Vector2) {
+      this.x += v.x; this.y += v.y;
+      return this;
+    }),
+    
+    sub: jest.fn(function(this: any, v: THREE.Vector2) {
+      this.x -= v.x; this.y -= v.y;
+      return this;
+    }),
+    
+    multiplyScalar: jest.fn(function(this: any, s: number) {
+      this.x *= s; this.y *= s;
+      return this;
+    }),
+    
+    length: jest.fn(function(this: any) {
+      return Math.sqrt(this.x * this.x + this.y * this.y);
+    }),
+    
+    normalize: jest.fn(function(this: any) {
+      const len = Math.sqrt(this.x * this.x + this.y * this.y);
+      if (len > 0) {
+        this.x /= len; this.y /= len;
+      }
+      return this;
+    }),
+    
+    angle: jest.fn(function(this: any) {
+      return Math.atan2(this.y, this.x);
+    }),
+    
+    rotateAround: jest.fn(function(this: any, center: THREE.Vector2, angle: number) {
+      const cos = Math.cos(angle);
+      const sin = Math.sin(angle);
+      const dx = this.x - center.x;
+      const dy = this.y - center.y;
+      this.x = cos * dx - sin * dy + center.x;
+      this.y = sin * dx + cos * dy + center.y;
+      return this;
+    }),
+  };
+  
+  Object.setPrototypeOf(instance, Vector2.prototype);
   return instance;
 });
 
@@ -699,12 +830,12 @@ export const Group = jest.fn((): Partial<THREE.Group> => ({
 // Matrix4 mock
 export const Matrix4 = jest.fn(function(): Partial<THREE.Matrix4> {
   const instance = {
-    elements: new Float32Array([
+    elements: [
       1, 0, 0, 0,
       0, 1, 0, 0,
       0, 0, 1, 0,
       0, 0, 0, 1
-    ]),
+    ] as number[],
     set: jest.fn(function(this: any, 
       n11: number, n12: number, n13: number, n14: number,
       n21: number, n22: number, n23: number, n24: number,
@@ -736,15 +867,29 @@ export const Matrix4 = jest.fn(function(): Partial<THREE.Matrix4> {
       return this;
     }),
     determinant: jest.fn(() => 1),
-    makeTranslation: jest.fn(function(this: any, x: number, y: number, z: number) {
-      this.set(
-        1, 0, 0, x,
-        0, 1, 0, y,
-        0, 0, 1, z,
-        0, 0, 0, 1
-      );
+    makeTranslation: jest.fn(function(this: any, ...args: any[]) {
+      // Support both Vector3 and (x,y,z) overloads for Three.js compatibility
+      if (args.length === 1) {
+        // Vector3 overload: makeTranslation(vector)
+        const vector = args[0];
+        this.set(
+          1, 0, 0, vector.x,
+          0, 1, 0, vector.y,
+          0, 0, 1, vector.z,
+          0, 0, 0, 1
+        );
+      } else if (args.length === 3) {
+        // Coordinate overload: makeTranslation(x, y, z)
+        const [x, y, z] = args;
+        this.set(
+          1, 0, 0, x,
+          0, 1, 0, y,
+          0, 0, 1, z,
+          0, 0, 0, 1
+        );
+      }
       return this;
-    }),
+    }) as any,
   };
   Object.setPrototypeOf(instance, Matrix4.prototype);
   return instance;
@@ -790,6 +935,7 @@ const mockThree = {
   Mesh,
   DirectionalLight,
   AmbientLight,
+  Vector2,
   Vector3,
   createMockThreeJSSetup,
 };

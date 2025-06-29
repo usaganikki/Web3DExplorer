@@ -80,14 +80,16 @@ describe('Renderer Logic Tests', () => {
   test('renderer size retrieval', () => {
     const renderer = new THREE.WebGLRenderer();
     
-    const size = renderer.getSize();
+    // Create a Vector2 target object for getSize
+    const sizeTarget = new THREE.Vector2(); 
+    const size = renderer.getSize(sizeTarget);
     
     // Verify getSize returns expected structure
     expect(size).toBeDefined();
-    expect(size).toHaveProperty('width');
-    expect(size).toHaveProperty('height');
-    expect(size.width).toBe(800);
-    expect(size.height).toBe(600);
+    expect(size).toHaveProperty('x');
+    expect(size).toHaveProperty('y');
+    expect(size.x).toBe(800);
+    expect(size.y).toBe(600);
   });
 
   test('renderer viewport configuration', () => {
